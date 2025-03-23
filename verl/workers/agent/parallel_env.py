@@ -128,15 +128,16 @@ def agent_rollout_loop(config, tokenizer, vllm_engine, vllm_inputs, prompts, sam
     # print(f" [DEBUG response] {running_response_string[:3]}=")
     # # print(f' [DEBUG state] {running_states[0]=}')
     # print(f" [DEBUG mask] {running_action_masks[:3]}=")
-    max_total_length = config.prompt_length + config.response_length
+    total_seq_length = config.prompt_length + config.response_length * config.agent.max_turns + config.agent.single_obs_max_length * (config.agent.max_turns - 1)
+    state_length = total_seq_length - config.prompt_length
     target_device = prompts.batch['input_ids'].device
-    running_states = [state[: max_total_length] for state in running_states]
-    state_tensor = pad_2d_list_to_length(running_states, tokenizer.pad_token_id, max_total_length).to(target_device)
-    running_action_masks = [mask[: max_total_length] for mask in running_action_masks]
-    action_mask_tensor = pad_2d_list_to_length(running_action_masks, 0, max_total_length).to(target_device)
-    reward_tensor_list = [reward[: max_total_length] for reward in reward_tensor_list]
-    reward_tensor = pad_2d_list_to_length(reward_tensor_list, 0.0, max_total_length).to(target_device)
-    return state_tensor[:, -config.response_length:], action_mask_tensor, reward_tensor[:, -config.response_length: ]
+    running_states = [state[: total_seq_length] for state in running_states]
+    state_tensor = pad_2d_list_to_length(running_states, tokenizer.pad_token_id, total_seq_length).to(target_device)
+    running_action_masks = [mask[: total_seq_length] for mask in running_action_masks]
+    action_mask_tensor = pad_2d_list_to_length(running_action_masks, 0, total_seq_length).to(target_device)
+    reward_tensor_list = [reward[: total_seq_length] for reward in reward_tensor_list]
+    reward_tensor = pad_2d_list_to_length(reward_tensor_list, 0.0, total_seq_length).to(target_device)
+    return state_tensor[:, -state_length:], action_mask_tensor, reward_tensor[:, -state_length:]
 
 
 def execute_tool_call(sample, tokenizer=None, pbar=None):

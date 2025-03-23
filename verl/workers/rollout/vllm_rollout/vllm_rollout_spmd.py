@@ -94,11 +94,10 @@ class vLLMRollout(BaseRollout):
             num_tp_per_train_tp = train_tp // tensor_parallel_size
             vllm_ps.initialize_parallel_state(tensor_model_parallel_size=tensor_parallel_size,
                                               num_tp_per_train_tp=num_tp_per_train_tp)
-
-        assert model_hf_config.max_position_embeddings >= config.prompt_length + config.response_length, \
+        total_seq_length = config.prompt_length + config.response_length * config.agent.max_turns + config.agent.single_obs_max_length * (config.agent.max_turns - 1)
+        assert model_hf_config.max_position_embeddings >= total_seq_length, \
             "model context length should be greater than total sequence length"
 
-        agent_buffer_length = config.agent.vllm_buffer_length if config.agent.activate_agent else 0
         self.inference_engine = LLM(
             model=model_path,
             enable_sleep_mode=True,
@@ -109,7 +108,7 @@ class vLLMRollout(BaseRollout):
             gpu_memory_utilization=config.gpu_memory_utilization,
             disable_custom_all_reduce=True,
             skip_tokenizer_init=False,
-            max_model_len=config.prompt_length + config.response_length + agent_buffer_length,
+            max_model_len=total_seq_length,
             disable_log_stats=config.disable_log_stats,
             max_num_batched_tokens=max_num_batched_tokens,
             enable_chunked_prefill=config.enable_chunked_prefill,
