@@ -49,8 +49,15 @@ class FrozenLakeTool(ToolBase):
             "right":2,
             "up":3
         }
-
-    def execute(self, *args, **kwargs) -> str:
+        
+    def extract_action(self, action_string: str) -> str:
+        pattern = r"<action>(.*?)</action>"
+        matches = re.findall(pattern, action_string)
+        if matches:
+            return matches[-1].strip()
+        return ""
+    
+    def execute(self, action_string, **kwargs):
         """
         Execute the tool functionality by taking an action in the Frozen Lake environment.
         
@@ -63,17 +70,15 @@ class FrozenLakeTool(ToolBase):
             done: Game terminated or not
             info: Additional info
         """
-        
-        action = kwargs.get("action", "non_valid")
+        action = self.extract_action(action_string)
+        print(f"[DEBUG]{action=}")
         if action in self.action_map:
             action = self.action_map[action]
         else:
             print(f"action is not valid")
-            return self.render(), 0, True, {}
-        
+            return self.render(train=True), 0, False, {}
         player_pos, self.reward, done, _, _ = self.env.step(action)
-        print(f"position{player_pos}")
-        obs = self.render()
+        obs = self.render(train=True)
 
         return obs, self.reward, done, {}
 
@@ -92,7 +97,7 @@ class FrozenLakeTool(ToolBase):
         obs = "\n".join(" ".join(row) for row in grid)
         return obs
 
-    def render(self):
+    def render(self, train):
         if self.render_mode == "rgb_array":
             obs = self.env.render()
         else:
@@ -100,7 +105,9 @@ class FrozenLakeTool(ToolBase):
             if isinstance(origin_obs, str):
                 obs = self.obs_transform(origin_obs)
                 obs = "[Observations]:\n" + obs
-        return obs
+                if train:
+                    obs = "<|im_start|>user\n" + obs + "<|im_end|>\n" + "<|im_start|>assistant\n"
+        return obs 
 
     def reset(self, *args, **kwargs):
         """

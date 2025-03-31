@@ -13,7 +13,7 @@ verl is flexible and easy to use with:
 
 - **Flexible device mapping and parallelism**: Supports various placement of models onto different sets of GPUs for efficient resource utilization and scalability across different cluster sizes.
 
-- Readily integration with popular HuggingFace models
+- Ready integration with popular HuggingFace models
 
 
 verl is fast with:
@@ -74,6 +74,7 @@ verl is fast with:
    
    perf/perf_tuning
    README_vllm0.7.md
+   README_vllm0.8.md
 
 .. toctree::
    :maxdepth: 1

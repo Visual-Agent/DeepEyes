@@ -16,7 +16,7 @@ import datasets
 from frozenlake import FrozenLakeTool
 
 templates = {
-    'qwen-instruct': '<|im_start|>user\n{prompt}\nAlways output: <think> [Your thoughts] </think> <action> [your action] </action> with no extra text. Strictly follow this format. <|im_end|>\n<|im_start|>assistant\n',
+    'qwen-instruct': '{prompt}\nAlways output: <think> [Your thoughts] </think> <action> [your action] </action> with no extra text. Strictly follow this format.',
 }
 
 intro = """You are walking on a frozen lake.
@@ -74,7 +74,7 @@ def main():
     instructions = []
     for seed in seeds:
         env = FrozenLakeTool(size=size, p=p, seed=seed, use_mm=use_mm, _name=None, _desc=None, _params=None)
-        observation = env.render()
+        observation = env.render(train=False)
         instruction = intro.format(observation=observation)
         instructions.append(instruction)
     
@@ -88,6 +88,7 @@ def main():
             "prompt": [{"role": "user", "content": prompt_formatted}],
             "ability": "bfs",
             "reward_model": {"style": "rule", "ground_truth": {"target": 0, "numbers": [0, 0]}},
+            "env_name": "frozenlake",
             "extra_info": {"split": "train", "index": idx}
         }
     train_dataset = Dataset.from_list([_create_instance(args.seed + i, instructions[i]) for i in range(args.train_size)])

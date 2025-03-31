@@ -40,6 +40,7 @@ PYTHONUNBUFFERED=1 python3 -m verl.trainer.main_ppo \
     actor_rollout_ref.rollout.agent.activate_agent=True \
     actor_rollout_ref.rollout.agent.single_obs_max_length=512 \
     actor_rollout_ref.rollout.agent.max_turns=100 \
+    actor_rollout_ref.rollout.agent.vllm_buffer_length=4096 \
     actor_rollout_ref.rollout.agent.concurrent_workers=4 \
     critic.optim.lr=1e-5 \
     critic.model.use_remove_padding=True \

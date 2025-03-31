@@ -26,6 +26,11 @@ def agent_rollout_loop(config, tokenizer, vllm_engine, vllm_inputs, prompts, sam
     agent_sampling_params.spaces_between_special_tokens = False
     agent_sampling_params.n = 1
     agent_sampling_params.include_stop_str_in_output = True
+    max_generated_tokens = min(config.agent.single_response_max_tokens, config.response_length)
+    agent_sampling_params.max_tokens = max_generated_tokens
+
+    # NOTE: to prevent oov issue for qwen base
+    agent_sampling_params.top_p = 0.99
 
     # support custom stop specified in dataset, like </search>, ```, etc.
     custom_stop = config.agent.custom_stop
@@ -34,10 +39,8 @@ def agent_rollout_loop(config, tokenizer, vllm_engine, vllm_inputs, prompts, sam
             custom_stop = [custom_stop]
         prev_stop = sampling_params.stop if sampling_params.stop else []
         agent_sampling_params.stop = prev_stop + custom_stop
-
     env = ParallelEnv(config.agent, tokenizer)
     env.reset(prompts, n=sampling_params.n)
-
     batch_size = len(vllm_inputs)
     vllm_input_list = []
     running_states = []
@@ -123,6 +126,13 @@ def agent_rollout_loop(config, tokenizer, vllm_engine, vllm_inputs, prompts, sam
                 active_mask[idx] = False
 
     env.close()
+    # running_response_string = tokenizer.batch_decode(
+    #     running_states,
+    #     skip_special_tokens=False,
+    # )
+    # print(f" [DEBUG response] {running_response_string[:3]}=")
+    # # print(f' [DEBUG state] {running_states[0]=}')
+    # print(f" [DEBUG mask] {running_action_masks[:3]}=")
     max_total_length = config.prompt_length + config.response_length
     target_device = prompts.batch['input_ids'].device
     running_states = [state[: max_total_length] for state in running_states]
@@ -131,7 +141,7 @@ def agent_rollout_loop(config, tokenizer, vllm_engine, vllm_inputs, prompts, sam
     action_mask_tensor = pad_2d_list_to_length(running_action_masks, 0, max_total_length).to(target_device)
     reward_tensor_list = [reward[: max_total_length] for reward in reward_tensor_list]
     reward_tensor = pad_2d_list_to_length(reward_tensor_list, 0.0, max_total_length).to(target_device)
-    return state_tensor[:, -config.response_length:], action_mask_tensor, reward_tensor[:, -config.response_length: ]
+    return state_tensor[:, -config.response_length: ], action_mask_tensor, reward_tensor[:, -config.response_length: ]
 
 
 def execute_tool_call(sample, tokenizer=None, pbar=None):
@@ -139,10 +149,10 @@ def execute_tool_call(sample, tokenizer=None, pbar=None):
     tool = sample.get('tool', None)
     agent_meta = sample.get('agent_meta', {})
     # print(f' [DEBUG rag input] {sample["idx"]=}, {action_string=}, {tool=}, agent_meta={agent_meta}')
-
+    # print(f' [DEBUG frozenlake input] {sample["idx"]=}, {action_string=}, {tool=}, agent_meta={agent_meta}')
     # non-agent data
     if action_string == '' or tool is None:
-        return {}, 0.0, True
+        return {}, 0.0, True, {}
 
     tool_result, reward, done, info = tool.execute(action_string, meta=agent_meta)
 
