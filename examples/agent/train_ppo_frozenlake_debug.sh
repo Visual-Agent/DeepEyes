@@ -5,7 +5,7 @@ export DATA_DIR=/cpfs/user/yangminghao/RL/fengyuan/InteractiveRL/data/frozenlake
 export VLLM_USE_MODELSCOPE=false
 
 PROJECT_NAME="agent_ppo_debug_frozenlake"
-EXPERIMENT_NAME=qwen25_7b_instruct_debug
+EXPERIMENT_NAME=qwen25_0.5b_instruct_debug
 BASE_MODEL=/cpfs/user/yangminghao/hf_model/Qwen2.5-0.5B-Instruct
 
 # set -x
@@ -51,7 +51,7 @@ PYTHONUNBUFFERED=1 python3 -m verl.trainer.main_ppo \
     critic.model.fsdp_config.optimizer_offload=True \
     algorithm.kl_ctrl.kl_coef=0.001 \
     trainer.critic_warmup=0 \
-    trainer.logger=['console'] \
+    trainer.logger=['console','tensorboard','rl_logging_board'] \
     +trainer.val_before_train=False \
     trainer.n_gpus_per_node=1 \
     trainer.nnodes=1 \

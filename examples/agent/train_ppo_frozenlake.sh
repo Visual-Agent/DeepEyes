@@ -1,18 +1,24 @@
 set -x
 
-# export CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7
+cd /cpfs/user/zhengziwei/workspace/agent/VeRL-Agent
+
+export HF_HOME=/cpfs/user/zhengziwei/HF_HOME
+export PATH=/cpfs/user/zhengziwei/ENV/miniconda3/envs/agent/bin:$PATH
+# export PATH=/cpfs/user/yangminghao/miniforge/envs/agent/bin:$PATH
+export VLLM_USE_MODELSCOPE=false
+export NCCL_DEBUG=WARN
+export VLLM_ATTENTION_BACKEND=XFORMERS
 export DATA_DIR=/cpfs/user/yangminghao/RL/fengyuan/InteractiveRL/data/frozenlake
-export OUTPUT_DIR=/cpfs/user/yangminghao/RL/fengyuan/InteractiveRL/ckpt
+# export OUTPUT_DIR=/cpfs/user/yangminghao/RL/fengyuan/InteractiveRL/ckpt
 
 PROJECT_NAME="agent_ppo_debug_frozenlake"
 EXPERIMENT_NAME=qwen25_7b_instruct_debug
 BASE_MODEL=/cpfs/user/fengyuan/backbone/qwen25/Qwen2.5-7B-Instruct
 
-mkdir -p ${OUTPUT_DIR}
-mkdir -p ${OUTPUT_DIR}/${PROJECT_NAME}/${EXPERIMENT_NAME}
+# mkdir -p ${OUTPUT_DIR}
+# mkdir -p ${OUTPUT_DIR}/${PROJECT_NAME}/${EXPERIMENT_NAME}
 
 # set -x
-export VLLM_ATTENTION_BACKEND=XFORMERS # vllm + qwen2-7b with flash_attn has some issues
 PYTHONUNBUFFERED=1 python3 -m verl.trainer.main_ppo \
     data.train_files=$DATA_DIR/train.parquet \
     data.val_files=$DATA_DIR/test.parquet \
@@ -54,7 +60,7 @@ PYTHONUNBUFFERED=1 python3 -m verl.trainer.main_ppo \
     critic.model.fsdp_config.optimizer_offload=True \
     algorithm.kl_ctrl.kl_coef=0.001 \
     trainer.critic_warmup=0 \
-    trainer.logger=['console'] \
+    trainer.logger=['console','tensorboard','rl_logging_board'] \
     trainer.n_gpus_per_node=8 \
     trainer.nnodes=${WORLD_SIZE} \
     trainer.save_freq=16 \
@@ -62,5 +68,6 @@ PYTHONUNBUFFERED=1 python3 -m verl.trainer.main_ppo \
     trainer.project_name=${PROJECT_NAME} \
     trainer.experiment_name=${EXPERIMENT_NAME} \
     trainer.total_epochs=15 \
-    trainer.default_local_dir=${OUTPUT_DIR}/${PROJECT_NAME}/${EXPERIMENT_NAME} \
-    2>&1 | tee ./logs/${EXPERIMENT_NAME}.log
+    +trainer.tensorboard_dir=./logs/tensorboard \
+    +trainer.rl_logging_board_dir=./logs/rl_logging_board \
+    2>&1 | tee ./${EXPERIMENT_NAME}.log

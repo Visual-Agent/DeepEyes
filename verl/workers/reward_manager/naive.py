@@ -108,24 +108,24 @@ class NaiveRewardManager:
             )
             reward_tensor[i, valid_response_length - 1] = score
 
-            # FOR DEBUGGING ONLY!!! DO NOT COMMIT!!!
-            action_mask = data_item.batch['action_mask'][prompt_length: prompt_length + valid_response_length]
-            debug_output = dict(
-                step=self.step_cnt,
-                prompt=prompt_str,
-                response=response_str,
-                ground_truth=str(ground_truth['target'].tolist()[0]),
-                score=float(score),
-                valid_prompt_length=int(valid_prompt_length.cpu().item()),
-                valid_response_length=int(valid_response_length.cpu().item()),
-                prompt_ids=valid_prompt_ids.cpu().numpy().tolist(),
-                response_ids=valid_response_ids.cpu().numpy().tolist(),
-                action_mask=action_mask.cpu().numpy().tolist(),
-            )
+            # # FOR DEBUGGING ONLY!!! DO NOT COMMIT!!!
+            # action_mask = data_item.batch['action_mask'][prompt_length: prompt_length + valid_response_length]
+            # debug_output = dict(
+            #     step=self.step_cnt,
+            #     prompt=prompt_str,
+            #     response=response_str,
+            #     ground_truth=str(ground_truth['target'].tolist()[0]),
+            #     score=float(score),
+            #     valid_prompt_length=int(valid_prompt_length.cpu().item()),
+            #     valid_response_length=int(valid_response_length.cpu().item()),
+            #     prompt_ids=valid_prompt_ids.cpu().numpy().tolist(),
+            #     response_ids=valid_response_ids.cpu().numpy().tolist(),
+            #     action_mask=action_mask.cpu().numpy().tolist(),
+            # )
 
-            debug_output_str = json.dumps(debug_output, ensure_ascii=False)
-            with open('/cpfs/user/fengyuan/code/github/verl/checkpoints/agent_ppo_debug/debug_rewards.jsonl', 'a+') as fout:
-                fout.write(debug_output_str + '\n')
+            # debug_output_str = json.dumps(debug_output, ensure_ascii=False)
+            # with open('/cpfs/user/fengyuan/code/github/verl/checkpoints/agent_ppo_debug/debug_rewards.jsonl', 'a+') as fout:
+            #     fout.write(debug_output_str + '\n')
 
             if data_source not in already_print_data_sources:
                 already_print_data_sources[data_source] = 0

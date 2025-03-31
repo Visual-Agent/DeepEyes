@@ -72,6 +72,9 @@ class RLLoggingBoardLogger:
                     cur_sample['values'] = data_item.batch['values'][:valid_response_length].cpu().tolist()
                 
                 if rm_response is not None:
-                    cur_sample['rm_response'] =rm_response
+                    cur_sample['rm_response'] = rm_response
+                
+                if isinstance(cur_sample["ground_truth"], dict):
+                    cur_sample["ground_truth"] = cur_sample["ground_truth"]['target']
                 
                 f.write(f"{json.dumps(cur_sample, ensure_ascii=False)}\n")

@@ -126,8 +126,6 @@ class Tracking(object):
             self.logger['swanlab'].finish()
         if 'vemlp_wandb' in self.logger:
             self.logger['vemlp_wandb'].finish(exit_code=0)
-        if 'tensorboard' in self.logger:
-            self.logger['tensorboard'].finish()
 
 
 class _TensorboardAdapter:
