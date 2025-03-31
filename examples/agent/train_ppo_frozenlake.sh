@@ -12,9 +12,9 @@ export DATA_DIR=/cpfs/user/yangminghao/RL/fengyuan/InteractiveRL/data/frozenlake
 # export OUTPUT_DIR=/cpfs/user/yangminghao/RL/fengyuan/InteractiveRL/ckpt
 
 PROJECT_NAME="agent_ppo_frozenlake"
-EXPERIMENT_NAME=qwen25_0.5b_instruct
-# BASE_MODEL=/cpfs/user/fengyuan/backbone/qwen25/Qwen2.5-7B-Instruct
-BASE_MODEL=/cpfs/user/yangminghao/hf_model/Qwen2.5-0.5B-Instruct
+EXPERIMENT_NAME=qwen25_7b_instruct
+BASE_MODEL=/cpfs/user/fengyuan/backbone/qwen25/Qwen2.5-7B-Instruct
+# BASE_MODEL=/cpfs/user/yangminghao/hf_model/Qwen2.5-0.5B-Instruct
 
 
 # mkdir -p ${OUTPUT_DIR}

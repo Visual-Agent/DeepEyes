@@ -55,18 +55,12 @@ def main(config):
 
 
 def run_ppo(config) -> None:
-<<<<<<< HEAD
     env_vars = {'TOKENIZERS_PARALLELISM': 'true', 'NCCL_DEBUG': 'WARN', 'VLLM_LOGGING_LEVEL': 'WARN'}
     if getattr(config, "debug", False):
         env_vars['RAY_DEBUG'] = "1"
         env_vars['RAY_DEBUG_POST_MORTEM'] = "1"
     if getattr(config.actor_rollout_ref.rollout, "vllm_use_v1", False):
         env_vars['VLLM_USE_V1'] = "1"
-=======
-    # TODO(linjunrong.ocss884): this ENV is left for resolving SGLang conflict with ray devices
-    # isolation, will solve in the future
-    os.environ["ENSURE_CUDA_VISIBLE_DEVICES"] = os.environ.get('CUDA_VISIBLE_DEVICES', '')
->>>>>>> origin/main
     if not ray.is_initialized():
         # this is for local ray cluster
         # ray.init(runtime_env={'env_vars': {'TOKENIZERS_PARALLELISM': 'true', 'NCCL_DEBUG': 'WARN'}})
