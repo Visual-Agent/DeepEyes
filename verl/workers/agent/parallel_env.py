@@ -272,7 +272,7 @@ class ParallelEnv:
     def reset(self, prompts, n=1):
         self.tools = []
         self.agent_meta = []
-        print(f' [DEBUG reset] {prompts.batch.keys()=}, {prompts.non_tensor_batch.keys()=}, {prompts.meta_info.keys()=}')
+        # print(f' [DEBUG reset] {prompts.batch.keys()=}, {prompts.non_tensor_batch.keys()=}, {prompts.meta_info.keys()=}')
 
         reset_output_list = []
         for i in range(len(prompts)):
@@ -286,10 +286,13 @@ class ParallelEnv:
                 self.agent_meta.append(tool_meta)
 
                 tool_name = data_item.non_tensor_batch.get(self.config.tool_name_key, '')
+                raw_prompt = data_item.non_tensor_batch.get('raw_prompt', '')
+                env_info = data_item.non_tensor_batch.get('env_info', '')
+                user_meta = self.config.user_model
                 if tool_name:
                     # init tools from config field `tool_name_key`
                     tool_fns = ToolBase.create(tool_name)
-                    reset_output = tool_fns.reset(tool_meta)
+                    reset_output = tool_fns.reset(tool_meta, user_meta=user_meta, raw_prompt=raw_prompt, env_info=env_info)
                     self.tools.append(tool_fns)
                     reset_output_list.append(reset_output)
                 else:
@@ -300,11 +303,11 @@ class ParallelEnv:
         # NOTE: pop agent keys to prevent batch_size mismatch when n>1
         if self.config.tool_name_key and self.config.tool_name_key in prompts.non_tensor_batch.keys():
             prompts.non_tensor_batch.pop(self.config.tool_name_key)
-            print(f' [DEBUG tools] non_gensor_batch pop key={self.config.tool_name_key}')
+            # print(f' [DEBUG tools] non_gensor_batch pop key={self.config.tool_name_key}')
         if self.config.tool_meta_key and self.config.tool_meta_key in prompts.non_tensor_batch.keys():
             prompts.non_tensor_batch.pop(self.config.tool_meta_key)
-            print(f' [DEBUG tools] non_gensor_batch pop key={self.config.tool_meta_key}')
-        print(f' [DEBUG tools] {len(self.tools)=}, {len(self.agent_meta)=}')
+            # print(f' [DEBUG tools] non_gensor_batch pop key={self.config.tool_meta_key}')
+        # print(f' [DEBUG tools] {len(self.tools)=}, {len(self.agent_meta)=}')
         return reset_output_list
 
     def close(self):

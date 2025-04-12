@@ -540,6 +540,11 @@ class RayPPOTrainer(object):
                 tool_name_key = self.config.actor_rollout_ref.rollout.agent.tool_name_key
                 if tool_name_key and tool_name_key in test_batch.non_tensor_batch.keys():
                     test_gen_batch.non_tensor_batch[tool_name_key] = test_batch.non_tensor_batch[tool_name_key]
+                if self.config.data.return_raw_chat:
+                    test_gen_batch.non_tensor_batch['raw_prompt'] = test_batch.non_tensor_batch['raw_prompt']
+                if self.config.actor_rollout_ref.rollout.agent.extra_env_info:                        
+                    assert 'env_info' in test_batch.non_tensor_batch.keys(), 'Please check create_data() to pass env_info to ENV!'
+                    test_gen_batch.non_tensor_batch['env_info'] = test_batch.non_tensor_batch['env_info']
 
             test_gen_batch.meta_info = {
                 'eos_token_id': self.tokenizer.eos_token_id,
@@ -548,7 +553,7 @@ class RayPPOTrainer(object):
                 'do_sample': self.config.actor_rollout_ref.rollout.val_kwargs.do_sample,
                 'validate': True,
             }
-            print(f'test_gen_batch meta info: {test_gen_batch.meta_info}')
+            # print(f'test_gen_batch meta info: {test_gen_batch.meta_info}')
 
             # pad to be divisible by dp_size
             test_gen_batch_padded, pad_size = pad_dataproto_to_divisor(test_gen_batch, self.actor_rollout_wg.world_size)
@@ -556,7 +561,7 @@ class RayPPOTrainer(object):
 
             # unpad
             test_output_gen_batch = unpad_dataproto(test_output_gen_batch_padded, pad_size=pad_size)
-            print('validation generation end')
+            # print('validation generation end')
 
             # Store generated outputs
             output_ids = test_output_gen_batch.batch['responses']
@@ -831,12 +836,17 @@ class RayPPOTrainer(object):
                         non_tensor_batch_keys=['raw_prompt_ids'],
                     )
 
-                print(f' [DEBUG config] config={self.config.actor_rollout_ref.rollout.agent}')
+                # print(f' [DEBUG config] config={self.config.actor_rollout_ref.rollout.agent}')
                 if self.config.actor_rollout_ref.rollout.agent.activate_agent:
                     tool_name_key = self.config.actor_rollout_ref.rollout.agent.tool_name_key
                     if tool_name_key and tool_name_key in batch.non_tensor_batch.keys():
                         gen_batch.non_tensor_batch[tool_name_key] = batch.non_tensor_batch[tool_name_key]
-                        print(f' [DEBUG trainer] {gen_batch.non_tensor_batch.keys()=}')
+                        # print(f' [DEBUG trainer] {gen_batch.non_tensor_batch.keys()=}')
+                    if self.config.data.return_raw_chat:
+                        gen_batch.non_tensor_batch['raw_prompt'] = batch.non_tensor_batch['raw_prompt']
+                    if self.config.actor_rollout_ref.rollout.agent.extra_env_info:                        
+                        assert 'env_info' in batch.non_tensor_batch.keys(), 'Please check create_data() to pass env_info to ENV!'
+                        gen_batch.non_tensor_batch['env_info'] = batch.non_tensor_batch['env_info']
 
                 is_last_step = self.global_steps >= self.total_training_steps
 
@@ -916,9 +926,9 @@ class RayPPOTrainer(object):
                             batch.batch['token_level_rewards'] = batch.batch['token_level_scores']
 
                         if 'env_reward' in batch.batch.keys():
-                            print(f' [DEBUG reward] rewards_before={batch.batch["token_level_rewards"].mean().item()}')
+                            # print(f' [DEBUG reward] rewards_before={batch.batch["token_level_rewards"].mean().item()}')
                             batch.batch['token_level_rewards'] += batch.batch['env_reward']
-                            print(f' [DEBUG reward] rewards_after={batch.batch["token_level_rewards"].mean().item()}')
+                            # print(f' [DEBUG reward] rewards_after={batch.batch["token_level_rewards"].mean().item()}')
 
                         # compute advantages, executed on the driver process
                         batch = compute_advantage(batch,

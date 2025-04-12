@@ -141,8 +141,8 @@ class NaiveRewardManager:
         self.step_cnt += 1
 
         if 'env_reward' in data_item.batch.keys():
-            print(f' [DEBUG reward] rewards_before={reward_tensor.cpu().mean().item()}')
+            # print(f' [DEBUG reward] rewards_before={reward_tensor.cpu().mean().item()}')
             reward_tensor += data.batch['env_reward']
-            print(f' [DEBUG reward] rewards_after={reward_tensor.cpu().mean().item()}')
+            # print(f' [DEBUG reward] rewards_after={reward_tensor.cpu().mean().item()}')
 
         return reward_tensor

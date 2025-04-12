@@ -8,6 +8,8 @@ from typing import Optional, List
 from PIL import Image
 import re 
 
+from collections import defaultdict
+
 # 临时修复
 # ToolBase.registry = {}
 

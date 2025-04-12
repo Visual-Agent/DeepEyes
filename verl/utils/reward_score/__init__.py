@@ -48,6 +48,9 @@ def _default_compute_score(data_source, solution_str, ground_truth, extra_info=N
 
     elif data_source in ["frozenlake"]:
         res = 0.0
+        
+    elif data_source in ["collab_code"]:
+        res = 0.0
 
     else:
         raise NotImplementedError
