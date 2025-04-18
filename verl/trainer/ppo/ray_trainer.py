@@ -548,8 +548,7 @@ class RayPPOTrainer(object):
                 tool_name_key = self.config.actor_rollout_ref.rollout.agent.tool_name_key
                 if tool_name_key and tool_name_key in test_batch.non_tensor_batch.keys():
                     test_gen_batch.non_tensor_batch[tool_name_key] = test_batch.non_tensor_batch.pop(tool_name_key)
-                if self.config.actor_rollout_ref.rollout.agent.extra_env_info:                        
-                    assert 'env_info' in test_batch.non_tensor_batch.keys(), 'Please check create_data() to pass env_info to ENV!'
+                if 'env_info' in test_batch.non_tensor_batch.keys():
                     test_gen_batch.non_tensor_batch['env_info'] = test_batch.non_tensor_batch['env_info']
 
             test_gen_batch.meta_info = {
@@ -871,8 +870,7 @@ class RayPPOTrainer(object):
                     if tool_name_key and tool_name_key in batch.non_tensor_batch.keys():
                         gen_batch.non_tensor_batch[tool_name_key] = batch.non_tensor_batch.pop(tool_name_key)
                         # print(f' [DEBUG trainer] {gen_batch.non_tensor_batch.keys()=}')
-                    if self.config.actor_rollout_ref.rollout.agent.extra_env_info:                        
-                        assert 'env_info' in batch.non_tensor_batch.keys(), 'Please check create_data() to pass env_info to ENV!'
+                    if 'env_info' in batch.non_tensor_batch.keys():
                         gen_batch.non_tensor_batch['env_info'] = batch.non_tensor_batch['env_info']
 
                 is_last_step = self.global_steps >= self.total_training_steps
