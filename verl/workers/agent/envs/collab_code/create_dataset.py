@@ -32,10 +32,11 @@ def make_map_fn(split, dataset_name):
 
         data = {
             "data_source": dataset_name,
+            "env_name": dataset_name,
             "prompt": [
             {
                 "role": "system",
-                "content": ASSISTANT_SP['code']
+                "content": ASSISTANT_SP['code_v3']
             },
             {
                 "role": "user",
@@ -63,11 +64,11 @@ def make_map_fn(split, dataset_name):
 def construct_rl_prompt(args):
     dataset = datasets.load_dataset('json', data_files=args.local_train_path)
     dataset = dataset.map(function=make_map_fn('train', args.dataset_name), with_indices=True)
-    dataset['train'].to_parquet(os.path.join(args.output_dir, 'train.parquet'))
+    dataset['train'].to_parquet(os.path.join(args.output_dir, 'train_spv3.parquet'))
     
     dataset = datasets.load_dataset('json', data_files=args.local_test_path)
     dataset = dataset.map(function=make_map_fn('test', args.dataset_name), with_indices=True)
-    dataset['train'].to_parquet(os.path.join(args.output_dir, 'test.parquet'))
+    dataset['train'].to_parquet(os.path.join(args.output_dir, 'test_spv3.parquet'))
 
 
 if __name__ == '__main__':

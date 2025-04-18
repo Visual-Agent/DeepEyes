@@ -3,7 +3,7 @@ set -x
 cd /cpfs/user/zhengziwei/workspace/agent/VeRL-Agent
 
 export HF_HOME=/cpfs/user/zhengziwei/HF_HOME
-export PATH=/cpfs/user/zhengziwei/ENV/miniconda3/envs/agent/bin:$PATH
+export PATH=/cpfs/user/zhengziwei/ENV/miniconda3/envs/verl_agent/bin:$PATH
 export VLLM_USE_MODELSCOPE=false
 export NCCL_DEBUG=WARN
 export VLLM_ATTENTION_BACKEND=XFORMERS
@@ -11,11 +11,11 @@ export DATA_DIR=/cpfs/user/zhengziwei/workspace/agent/VeRL-Agent/data/collab_cod
 
 PROJECT_NAME="agent_ppo_collab_code_debug"
 EXPERIMENT_NAME=qwen25_0.5b_instruct_debug
-BASE_MODEL=/cpfs/user/yangminghao/hf_model/Qwen2.5-0.5B-Instruct
+BASE_MODEL=/cpfs/user/zhengziwei/HF_HOME/hub/models--Qwen--Qwen2.5-0.5B-Instruct/snapshots/7ae557604adf67be50417f59c2c2f167def9a775
 
 
 PYTHONUNBUFFERED=1 python3 -m verl.trainer.main_ppo \
-    +debug=False \
+    +debug=True \
     data.train_files=$DATA_DIR/train.parquet \
     data.val_files=$DATA_DIR/test.parquet \
     data.train_batch_size=512 \
@@ -40,7 +40,7 @@ PYTHONUNBUFFERED=1 python3 -m verl.trainer.main_ppo \
     actor_rollout_ref.rollout.max_num_batched_tokens=32768 \
     actor_rollout_ref.ref.log_prob_micro_batch_size_per_gpu=2 \
     actor_rollout_ref.ref.fsdp_config.param_offload=True \
-    actor_rollout_ref.rollout.n=1 \
+    actor_rollout_ref.rollout.n=2 \
     actor_rollout_ref.rollout.temperature=1 \
     actor_rollout_ref.rollout.free_cache_engine=True \
     actor_rollout_ref.rollout.agent.activate_agent=True \
@@ -48,6 +48,7 @@ PYTHONUNBUFFERED=1 python3 -m verl.trainer.main_ppo \
     actor_rollout_ref.rollout.agent.max_turns=10 \
     actor_rollout_ref.rollout.agent.concurrent_workers=4 \
     +actor_rollout_ref.rollout.agent.extra_env_info=True \
+    actor_rollout_ref.rollout.agent.custom_stop=[] \
     actor_rollout_ref.rollout.agent.user_model.level=low \
     actor_rollout_ref.rollout.agent.user_model.url='10.39.0.101' \
     actor_rollout_ref.rollout.agent.user_model.name=qwen-72b-instruct \
@@ -65,7 +66,7 @@ PYTHONUNBUFFERED=1 python3 -m verl.trainer.main_ppo \
     algorithm.kl_ctrl.kl_coef=0.001 \
     trainer.critic_warmup=0 \
     trainer.logger=['console','tensorboard','rl_logging_board'] \
-    +trainer.val_before_train=True \
+    trainer.val_before_train=True \
     trainer.n_gpus_per_node=1 \
     trainer.nnodes=1 \
     trainer.save_freq=16 \

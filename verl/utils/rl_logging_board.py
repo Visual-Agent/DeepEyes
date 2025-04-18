@@ -59,7 +59,7 @@ class RLLoggingBoardLogger:
                     "response": response_str,
                     "response_tokens": response_tokens,
                     "logprobs": data_item.batch['old_log_probs'][:valid_response_length].cpu().tolist(),
-                    "ref_logprobs": data_item.batch['ref_log_prob'][:valid_response_length].cpu().tolist(),
+                    # "ref_logprobs": data_item.batch['ref_log_prob'][:valid_response_length].cpu().tolist(),
                     # "values": data_item.batch['values'][:valid_response_length].cpu().tolist(),
                     "token_rewards": data_item.batch['token_level_rewards'][:valid_response_length].cpu().tolist(),     # with KL penalty
                     "reward": data_item.batch['token_level_scores'][:valid_response_length].cpu().sum().item(),         # without KL penalty"

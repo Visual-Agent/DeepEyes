@@ -96,7 +96,7 @@ def f1_score(prediction, ground_truth):
     return f1, precision, recall
 
 
-def compute_score(data_source: str, predict_str: str, ground_truth: str) -> float:
+def compute_score(predict_str: str, ground_truth: str) -> float:
     is_format_error = False
     predict_str = '<think>' + predict_str
     count_1 = predict_str.count("<|begin_of_documents|>\n")
@@ -109,8 +109,8 @@ def compute_score(data_source: str, predict_str: str, ground_truth: str) -> floa
     if not (count_1 == count_2 == count_3 == count_4 == count_5 == count_6 == count_7):
         is_format_error = True
 
-    count_assiatant_1 = predict_str.count("Assistant")
-    count_assiatant_2 = predict_str.count("assistant")
+    count_assiatant_1 = predict_str.count("Assistant:")
+    count_assiatant_2 = predict_str.count("assistant:")
     if count_assiatant_1 != 0 or count_assiatant_2 != 0:
         is_format_error = True
 
@@ -128,8 +128,11 @@ def compute_score(data_source: str, predict_str: str, ground_truth: str) -> floa
     if "begin_of_query" in answer_text or "begin_of_documents" in answer_text:
         is_format_error = True
 
-    answer_len=len(answer_text.split())
+    answer_len = len(answer_text.split())
     if answer_len > 10:
+        is_format_error = True
+
+    if count_7 == 0:
         is_format_error = True
 
     # retrieval_pattern = re.compile(r'<\|begin_of_query\|>(.*?)<\|end_of_query\|>', re.DOTALL)
@@ -138,10 +141,18 @@ def compute_score(data_source: str, predict_str: str, ground_truth: str) -> floa
     # doc_match = re.search(doc_pattern, predict_str)
     # retrieval_reward = 0.5 if retrieval_match and doc_match else 0.0
 
-    retrieval_reward = 0.1 if count_7 >= 1 and count_2 == count_7 else 0.0
+    retrieval_reward = 0.0 # -1.0 if count_7 >= 1 else 0.0
     # em_score = exact_match.compute(references=[ground_truth], predictions=[answer_text], ignore_case=True, ignore_punctuation=True)
     acc_reward, _ , _ = f1_score(answer_text, ground_truth)
     acc_reward = 2.0 * acc_reward
 
     format_reward = -2.0 if is_format_error else 0.0
     return format_reward + retrieval_reward + acc_reward
+
+
+def compute_score_eval(predict_str: str, ground_truth: str):
+    predict_no_think = predict_str.split('</think>')[-1].strip()
+    answer_text = predict_no_think.split("<answer>")[-1].split("</answer>")[0].strip()
+    score_info = exact_match.compute(references=[ground_truth], predictions=[answer_text], ignore_case=True, ignore_punctuation=True)
+    acc_reward = float(score_info['exact_match'])
+    return acc_reward

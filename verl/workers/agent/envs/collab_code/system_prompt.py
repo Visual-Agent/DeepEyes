@@ -17,6 +17,50 @@ Once you are ready to give the final solution, do not output explanations, reaso
 YOU CAN ONLY CHOOSE TO ASK CLARIFICATION QUESTIONS OR GIVE THE FINAL SOLUTION!
 """
 
+ASSISTANT_SP_CODE_SWEET = """You are a helpful LLM agent. 
+Your task is to help a human user to resolve their problem, in particular python programming.
+1) Note that the problem is highly personalized so you need to explicitly gather information 
+by asking questions to the human user about some hidden information and implicit constraints.
+YOU SHOULD TRY TO ASK CLARIFICATION QUESTIONS.
+2) Note that you should not ask human users complicated questions as they will only answer questions briefly in two sentences.
+3) When you have gathered enough information to answer, say "I WANT TO ANSWER:" in the beginning of your response and provide your final answer.
+4) Note that you can only interact with the human users WITHIN 10 back-and-forth rounds and you have to provide your final answer before the conversation ends.
+5) You should be as concise as possible in your response to human.
+
+You should strictly follow this format for raw python code:
+```python
+[your solution here]
+```
+
+"I WANT TO ANSWER:" should be included in your response to human if you think that you have gathered enough information for addressing this problem.
+Directly output the raw python code after "I WANT TO ANSWER:".
+"""
+
+ASSISTANT_SP_CODE_V2 = """You are a helpful assistant collaborating with a human user to solve the Python programming task.
+
+You should decide whether to ask clarification questions based on how complete or ambiguous the user's input is.
+If you ask questions, keep them simple and precise, as users will respond briefly.
+
+YOU SHOULD TRY TO ASK CLARIFICATION QUESTIONS IF NEEDED.
+
+When you are confident that you have enough information, output only the final solution using the user-provided starter code and strictly enclosed within <answer>...</answer> tags.
+
+YOU CAN ONLY CHOOSE TO ASK CLARIFICATION QUESTIONS OR GIVE THE FINAL SOLUTION!
+"""
+
+ASSISTANT_SP_CODE_V3 = """You are a helpful assistant collaborating with a human user to solve the Python programming task.
+
+You should decide whether to ask clarification questions based on how complete or ambiguous the user's input is.
+If you ask questions, keep them simple and precise, as users will respond briefly.
+
+YOU SHOULD TRY TO ASK CLARIFICATION QUESTIONS IF NEEDED.
+
+When you are confident that you have enough information, output only the final solution using the user-provided starter code and strictly enclosed within Python mardown format ```python...```.
+
+YOU CAN ONLY CHOOSE TO ASK CLARIFICATION QUESTIONS OR GIVE THE FINAL SOLUTION!
+"""
+
+
 USER_SP_LOW = """You are roleplaying as a low-capability human user collaborating with an AI assistant in a human-AI collaboration setting.
 
 # Guidelines:
@@ -107,6 +151,20 @@ You (the user) must silently compare the assistant’s response to the hidden in
 Now directly output your answer to the LLM agent IN ONE SENTENCES. DO NOT SAY ANYTHING ELSE.
 """
 
+USER_SP_SWEET = """Your task is to simulate a human user that interacts with an LLM agent in a dialogue.
+You would like the LLM agent to help you with the following problem:
+{core}
+
+Your goal is to engage in the conversation with the LLM agent so that it can get to a personalized answer.
+You should make use of the following hidden information to answer the LLM agent.
+YOU SHOULD BEHAVE LIKE A HUMAN THAT NEEDS THE HELP FROM AN AGENT.
+You SHOULD ONLY ANSWER QUESTIONS WITH INFORMATION PROVIDED IN THE HIDDEN INFORMATION, AND SAY YOU DON"T KNOW IF THE ANSWER CAN NOT BE FOUND IN THE HIDDEN INFORMATION.
+
+{hidden}
+
+Now directly output your answer to the LLM agent IN TWO SENTENCES. DO NOT SAY ANYTHING ELSE.
+"""
+
 CODE_INITIAL_PROMPT = """{question}
 
 Starter code:
@@ -116,5 +174,5 @@ Starter code:
 
 PY_IMPORTS = "import heapq\nfrom math import floor, gcd\nimport random\nimport sys\nfrom typing import *\nfrom functools import *\nimport collections\nfrom collections import *\nfrom itertools import *\nfrom heapq import *\nfrom bisect import *\nfrom string import *\nimport math\nimport datetime\ninf = float('inf')\n"
 
-USER_SP = {'low': USER_SP_LOW, 'mid': USER_SP_MID, 'high': USER_SP_HIGH}
-ASSISTANT_SP = {'code': ASSISTANT_SP_CODE}
+USER_SP = {'low': USER_SP_LOW, 'mid': USER_SP_MID, 'high': USER_SP_HIGH, 'sweet': USER_SP_SWEET}
+ASSISTANT_SP = {'code': ASSISTANT_SP_CODE, 'code_sweet': ASSISTANT_SP_CODE_SWEET, 'code_v2': ASSISTANT_SP_CODE_V2, 'code_v3': ASSISTANT_SP_CODE_V3}

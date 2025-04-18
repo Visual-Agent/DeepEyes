@@ -7,8 +7,18 @@ from verl.workers.agent.tool_envs import ToolBase, extract_tool_call_contents
 
 class RAGEngineEnvV2(ToolBase):
     name = "rag_v2"
-
+    base_ip = "10.39.13.224"
+    base_ip_2 = "10.39.5.6"
     valid_url_list = [
+        "http://10.39.13.224:25121/queries",
+        "http://10.39.13.224:25122/queries",
+        "http://10.39.13.224:25123/queries",
+        "http://10.39.13.224:25124/queries",
+        "http://10.39.13.224:25125/queries",
+        "http://10.39.13.224:25126/queries",
+        "http://10.39.13.224:25127/queries",
+        "http://10.39.13.224:25128/queries",
+
         "http://10.39.5.6:25111/queries",
         "http://10.39.5.6:25112/queries",
         "http://10.39.5.6:25113/queries",

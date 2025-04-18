@@ -29,12 +29,12 @@ python3 -m verl.trainer.main_ppo \
     actor_rollout_ref.rollout.gpu_memory_utilization=0.6 \
     actor_rollout_ref.rollout.n=5 \
     actor_rollout_ref.ref.fsdp_config.param_offload=True \
-    algorithm.kl_ctrl.kl_coef=0.001 \
+    algorithm.use_kl_in_reward=False \
     trainer.critic_warmup=0 \
     trainer.logger=['console','wandb'] \
     trainer.project_name='verl_grpo_example_gsm8k' \
     trainer.experiment_name='qwen2_7b_function_rm_kl1e-3' \
-    +trainer.val_before_train=False \
+    trainer.val_before_train=False \
     trainer.n_gpus_per_node=8 \
     trainer.nnodes=1 \
     trainer.save_freq=-1 \

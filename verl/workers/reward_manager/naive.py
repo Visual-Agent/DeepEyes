@@ -15,6 +15,7 @@
 from verl import DataProto
 from verl.utils.reward_score import _default_compute_score
 import torch
+from collections import defaultdict
 
 import json
 import datetime
@@ -23,57 +24,31 @@ class NaiveRewardManager:
     """The reward manager.
     """
 
-    def __init__(self, tokenizer, num_examine, compute_score=None) -> None:
+    def __init__(self, tokenizer, num_examine, compute_score=None, reward_fn_key='data_source') -> None:
         self.tokenizer = tokenizer
         self.num_examine = num_examine  # the number of batches of decoded responses to print to the console
         self.compute_score = compute_score or _default_compute_score
+        self.reward_fn_key = reward_fn_key
 
         self.step_cnt = 0
 
-    def verify(self, data):
-        scores = []
-        for i in range(len(data)):
-            data_item = data[i]  # DataProtoItem
-
-            prompt_ids = data_item.batch['prompts']
-
-            prompt_length = prompt_ids.shape[-1]
-
-            valid_prompt_length = data_item.batch['attention_mask'][:prompt_length].sum()
-            valid_prompt_ids = prompt_ids[-valid_prompt_length:]
-
-            response_ids = data_item.batch['responses']
-            valid_response_length = data_item.batch['attention_mask'][prompt_length:].sum()
-            valid_response_ids = response_ids[:valid_response_length]
-
-            # decode
-            prompt_str = self.tokenizer.decode(valid_prompt_ids)
-            response_str = self.tokenizer.decode(valid_response_ids)
-
-            ground_truth = data_item.non_tensor_batch['reward_model']['ground_truth']
-
-            data_source = data_item.non_tensor_batch['data_source']
-
-            extra_info = data_item.non_tensor_batch.get('extra_info', None)
-
-            score = self.compute_score(
-                data_source=data_source,
-                solution_str=response_str,
-                ground_truth=ground_truth,
-                extra_info=extra_info,
-            )
-            scores.append(score)
-        data.batch['acc'] = torch.tensor(scores, dtype=torch.float32, device=prompt_ids.device)
-        return scores
-
-    def __call__(self, data: DataProto):
+    def __call__(self, data: DataProto, return_dict=False):
         """We will expand this function gradually based on the available datasets"""
 
         # If there is rm score, we directly return rm score. Otherwise, we compute via rm_score_fn
         if 'rm_scores' in data.batch.keys():
-            return data.batch['rm_scores']
+            if return_dict:
+                return {"reward_tensor": data.batch['rm_scores']}
+            else:
+                return data.batch['rm_scores']
 
         reward_tensor = torch.zeros_like(data.batch['responses'], dtype=torch.float32)
+        reward_extra_info = defaultdict(list)
+
+        action_or_attn_mask = data.batch['action_mask'] if 'action_mask' in data.batch.keys() else data.batch['attention_mask']
+        if 'env_reward' in data.batch.keys():
+            reward_tensor += data.batch['env_reward']
+            # print(f' [DEBUG reward] mean={reward_tensor.mean().item()}, min={reward_tensor.min().item()}, max={reward_tensor.max().item()}')
 
         already_print_data_sources = {}
 
@@ -97,7 +72,7 @@ class NaiveRewardManager:
 
             ground_truth = data_item.non_tensor_batch['reward_model']['ground_truth']
 
-            data_source = data_item.non_tensor_batch['data_source']
+            data_source = data_item.non_tensor_batch[self.reward_fn_key]
 
             extra_info = data_item.non_tensor_batch.get('extra_info', None)
 
@@ -107,9 +82,21 @@ class NaiveRewardManager:
                 ground_truth=ground_truth,
                 extra_info=extra_info,
             )
-            reward_tensor[i, valid_response_length - 1] = score
 
-            # # FOR DEBUGGING ONLY!!! DO NOT COMMIT!!!
+            if isinstance(score, dict):
+                reward = score["score"]
+                # Store the information including original reward
+                for key, value in score.items():
+                    reward_extra_info[key].append(value)
+            else:
+                reward = score
+
+            reward_tensor[i, valid_response_length - 1] = reward
+
+            # eos_idx = torch.nonzero(action_or_attn_mask[i, prompt_length: prompt_length + valid_response_length])[-1]
+            # reward_tensor[i, eos_idx] = score
+
+            # FOR DEBUGGING ONLY!!! DO NOT COMMIT!!!
             # action_mask = data_item.batch['action_mask'][prompt_length: prompt_length + valid_response_length]
             # debug_output = dict(
             #     step=self.step_cnt,
@@ -117,32 +104,39 @@ class NaiveRewardManager:
             #     response=response_str,
             #     ground_truth=str(ground_truth['target'].tolist()[0]),
             #     score=float(score),
+            #     env_reward_sum=float(env_reward.cpu().numpy().sum()),
             #     valid_prompt_length=int(valid_prompt_length.cpu().item()),
             #     valid_response_length=int(valid_response_length.cpu().item()),
             #     prompt_ids=valid_prompt_ids.cpu().numpy().tolist(),
             #     response_ids=valid_response_ids.cpu().numpy().tolist(),
             #     action_mask=action_mask.cpu().numpy().tolist(),
+            #     reward_list=reward_tensor[i, :valid_response_length].cpu().numpy().tolist(),
             # )
 
             # debug_output_str = json.dumps(debug_output, ensure_ascii=False)
-            # with open('/cpfs/user/fengyuan/code/github/verl/checkpoints/agent_ppo_debug/debug_rewards.jsonl', 'a+') as fout:
+            # with open('/cpfs/user/fengyuan/code/github/verl/checkpoints/agent_ppo_debug/debug_rewards_v2.jsonl', 'a+') as fout:
             #     fout.write(debug_output_str + '\n')
 
-            # if data_source not in already_print_data_sources:
-            #     already_print_data_sources[data_source] = 0
+            if data_source not in already_print_data_sources:
+                already_print_data_sources[data_source] = 0
 
-            # if already_print_data_sources[data_source] < self.num_examine:
-            #     already_print_data_sources[data_source] += 1
-            #     print("[prompt]", prompt_str)
-            #     print("[response]", response_str)
-            #     print("[ground_truth]", ground_truth)
-            #     print("[score]", score)
+            if already_print_data_sources[data_source] < self.num_examine:
+                already_print_data_sources[data_source] += 1
+                print("[prompt]", prompt_str)
+                print("[response]", response_str)
+                print("[ground_truth]", ground_truth)
+                if isinstance(score, dict):
+                    for key, value in score.items():
+                        print(f"[{key}]", value)
+                else:
+                    print(f"[score]", score)
 
-        self.step_cnt += 1
+            self.step_cnt += 1
 
-        if 'env_reward' in data_item.batch.keys():
-            # print(f' [DEBUG reward] rewards_before={reward_tensor.cpu().mean().item()}')
-            reward_tensor += data.batch['env_reward']
-            # print(f' [DEBUG reward] rewards_after={reward_tensor.cpu().mean().item()}')
-
-        return reward_tensor
+        if return_dict:
+            return {
+                "reward_tensor": reward_tensor,
+                "reward_extra_info": reward_extra_info,
+            }
+        else:
+            return reward_tensor

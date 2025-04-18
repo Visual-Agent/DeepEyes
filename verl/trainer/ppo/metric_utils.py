@@ -16,15 +16,24 @@ Metrics related to the PPO trainer.
 """
 
 import torch
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Callable
 import numpy as np
 from verl import DataProto
+from collections import Counter, defaultdict
+from functools import partial
+import torch.nn.functional as F
 
 
 def reduce_metrics(metrics: Dict[str, List[Any]]) -> Dict[str, Any]:
     for key, val in metrics.items():
         metrics[key] = np.mean(val)
     return metrics
+
+
+def count_action_num(tensor):
+    padded = F.pad(tensor, (1, 0))
+    diff = padded[:, 1:] - padded[:, :-1]
+    return diff == 1
 
 
 def _compute_response_info(batch):
@@ -40,8 +49,10 @@ def _compute_response_info(batch):
         action_mask = batch.batch['action_mask'][:, -batch.batch['responses'].shape[-1]:]
         obs_mask = response_mask * (1 - action_mask)
         obs_length = obs_mask.sum(-1).float()
+        action_num = count_action_num(obs_mask).sum(-1).float()
     else:
         obs_length = torch.zeros_like(response_length)
+        action_num = torch.zeros_like(response_length)
     response_length -= obs_length
 
     return dict(
@@ -49,6 +60,7 @@ def _compute_response_info(batch):
         prompt_length=prompt_length,
         response_length=response_length,
         obs_length=obs_length,
+        action_num=action_num
     )
 
 
@@ -72,6 +84,7 @@ def compute_data_metrics(batch: DataProto, use_critic: bool = True) -> Dict[str,
     prompt_length = response_info['prompt_length']
     response_length = response_info['response_length']
     obs_length = response_info['obs_length']
+    action_num = response_info['action_num']
 
     valid_adv = torch.masked_select(advantages, response_mask)
     valid_returns = torch.masked_select(returns, response_mask)
@@ -134,6 +147,11 @@ def compute_data_metrics(batch: DataProto, use_critic: bool = True) -> Dict[str,
         'obs_length/mean': torch.mean(obs_length).detach().item(),
         'obs_length/min': torch.min(obs_length).detach().item(),
         'obs_length/max': torch.max(obs_length).detach().item(),
+        
+        # action num
+        'action_num/mean': torch.mean(action_num).detach().item(),
+        'action_num/min': torch.min(action_num).detach().item(),
+        'action_num/max': torch.max(action_num).detach().item(),
 
         # prompt length
         'prompt_length/mean':
@@ -183,3 +201,113 @@ def compute_throughout_metrics(batch: DataProto, timing_raw: Dict[str, float], n
         'perf/time_per_step': time,
         'perf/throughput': total_num_tokens / (time * n_gpus),
     }
+
+
+def bootstrap_metric(data: list[Any],
+                     subset_size: int,
+                     reduce_fns: list[Callable[[np.ndarray], float]],
+                     n_bootstrap: int = 1000,
+                     seed: int = 42) -> list[tuple[float, float]]:
+    np.random.seed(seed)
+
+    bootstrap_metric_lsts = [[] for _ in range(len(reduce_fns))]
+    for _ in range(n_bootstrap):
+        bootstrap_idxs = np.random.choice(len(data), size=subset_size, replace=True)
+        bootstrap_data = [data[i] for i in bootstrap_idxs]
+        for i, reduce_fn in enumerate(reduce_fns):
+            bootstrap_metric_lsts[i].append(reduce_fn(bootstrap_data))
+    return [(np.mean(lst), np.std(lst)) for lst in bootstrap_metric_lsts]
+
+
+def calc_maj_val(data: list[dict[str, Any]], vote_key: str, val_key: str) -> float:
+    """
+    Calculate the majority voting metric
+    """
+    vote2vals = defaultdict(list)
+    for d in data:
+        vote2vals[d[vote_key]].append(d[val_key])
+
+    vote2cnt = {k: len(v) for k, v in vote2vals.items()}
+    maj_vote = max(vote2cnt, key=vote2cnt.get)
+
+    maj_val = vote2vals[maj_vote][0]
+
+    return maj_val
+
+
+def process_validation_metrics(data_sources: list[str],
+                               sample_inputs: list[str],
+                               infos_dict: dict[str, list[Any]],
+                               seed: int = 42) -> dict[str, dict[str, dict[str, float]]]:
+    """Process validation metrics into a structured format.
+    
+    Args:
+        data_sources: Array of data source identifiers for each sample
+        sample_inputs: List of input prompts
+        infos_dict: variable name -> list of values for each sample
+        
+    Returns:
+        dict[str, dict[str, dict[str, float]]]: data source -> variable name -> metric value
+    """
+    # Group metrics by data source, prompt and variable
+    data_src2prompt2var2vals = defaultdict(lambda: defaultdict(lambda: defaultdict(list)))
+    for sample_idx, data_source in enumerate(data_sources):
+        prompt = sample_inputs[sample_idx]
+        var2vals = data_src2prompt2var2vals[data_source][prompt]
+        for var_name, var_vals in infos_dict.items():
+            var2vals[var_name].append(var_vals[sample_idx])
+
+    # Calculate metrics for each group
+    data_src2prompt2var2metric = defaultdict(lambda: defaultdict(lambda: defaultdict(dict)))
+    for data_source, prompt2var2vals in data_src2prompt2var2vals.items():
+        for prompt, var2vals in prompt2var2vals.items():
+            for var_name, var_vals in var2vals.items():
+                if isinstance(var_vals[0], str):
+                    continue
+                metric = {}
+                n_resps = len(var_vals)
+                metric[f"mean@{n_resps}"] = np.mean(var_vals)
+                metric[f"std@{n_resps}"] = np.std(var_vals)
+
+                ns = []
+                n = 2
+                while n < n_resps:
+                    ns.append(n)
+                    n *= 2
+                ns.append(n_resps)
+
+                for n in ns:
+                    # Best/Worst-of-N
+                    [(bon_mean, bon_std), (won_mean, won_std)] = bootstrap_metric(data=var_vals,
+                                                                                  subset_size=n,
+                                                                                  reduce_fns=[np.max, np.min],
+                                                                                  seed=seed)
+                    metric[f"best@{n}/mean"], metric[f"best@{n}/std"] = bon_mean, bon_std
+                    metric[f"worst@{n}/mean"], metric[f"worst@{n}/std"] = won_mean, won_std
+                    # Majority voting
+                    if var2vals.get("pred", None) is not None:
+                        vote_data = [{"val": val, "pred": pred} for val, pred in zip(var_vals, var2vals["pred"])]
+                        [(maj_n_mean, maj_n_std)
+                        ] = bootstrap_metric(data=vote_data,
+                                             subset_size=n,
+                                             reduce_fns=[partial(calc_maj_val, vote_key="pred", val_key="val")],
+                                             seed=seed)
+                        metric[f"maj@{n}/mean"], metric[f"maj@{n}/std"] = maj_n_mean, maj_n_std
+
+                data_src2prompt2var2metric[data_source][prompt][var_name] = metric
+
+    # Aggregate metrics across prompts
+    data_src2var2metric2prompt_vals = defaultdict(lambda: defaultdict(lambda: defaultdict(list)))
+    for data_source, prompt2var2metric in data_src2prompt2var2metric.items():
+        for prompt, var2metric in prompt2var2metric.items():
+            for var_name, metric in var2metric.items():
+                for metric_name, metric_val in metric.items():
+                    data_src2var2metric2prompt_vals[data_source][var_name][metric_name].append(metric_val)
+
+    data_src2var2metric2val = defaultdict(lambda: defaultdict(lambda: defaultdict(float)))
+    for data_source, var2metric2prompt_vals in data_src2var2metric2prompt_vals.items():
+        for var_name, metric2prompt_vals in var2metric2prompt_vals.items():
+            for metric_name, prompt_vals in metric2prompt_vals.items():
+                data_src2var2metric2val[data_source][var_name][metric_name] = np.mean(prompt_vals)
+
+    return data_src2var2metric2val

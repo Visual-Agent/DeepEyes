@@ -48,6 +48,7 @@ docker/Dockerfile.rocm
         liger-kernel \
         numpy \
         pandas \
+        datasets \
         peft \
         "pyarrow>=15.0.0" \
         pylatexenc \
@@ -134,7 +135,7 @@ PPO
      trainer.logger=['console'] \
      trainer.project_name=$YOUR_PROJECT_NAME \
      trainer.experiment_name=$YOUR_RUN_NAME \
-     +trainer.val_before_train=False \
+     trainer.val_before_train=False \
      trainer.default_hdfs_dir=null \
      trainer.n_gpus_per_node=$GPUS_PER_NODE \
      trainer.nnodes=1 \
@@ -189,7 +190,7 @@ GRPO
         trainer.project_name=$YOUR_PROJECT_NAME \
         trainer.experiment_name=$YOUR_RUN_NAME \
         trainer.n_gpus_per_node=$GPUS_PER_NODE \
-        +trainer.val_before_train=False \
+        trainer.val_before_train=False \
         trainer.nnodes=1 \
         trainer.save_freq=-1 \
         trainer.test_freq=10 \
@@ -494,7 +495,7 @@ slurm_script.sh
         trainer.project_name='verl_example' \
         trainer.experiment_name='Qwen2.5-32B-Instruct_function_rm' \
         trainer.n_gpus_per_node=${SLURM_GPUS_PER_NODE} \
-        +trainer.val_before_train=False \
+        trainer.val_before_train=False \
         trainer.nnodes=${SLURM_NNODES} \
         trainer.save_freq=-1 \
         trainer.test_freq=10 \

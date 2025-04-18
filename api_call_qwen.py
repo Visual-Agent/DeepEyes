@@ -10,18 +10,29 @@ import json
 from multiprocessing import Pool, cpu_count
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import random
-import os
+import os, sys
 import copy
 import logging
 from datetime import datetime
 import argparse
-from verl.workers.agent.envs.collab_code.code import extract_code_from_string
-from verl.workers.agent.envs.collab_code.sandbox_verify import RunCodeRequest, RunStatus, run_code_in_sandbox
+from verl.workers.agent.envs.collab_code.sandbox_verify import RunCodeRequest, RunStatus, run_code_in_sandbox, OJConfig, oj_in_sandbox, OJRequest
 
 
 CODE_PROMPT = "Please solve the programming task below using a self-contained code snippet in a markdown code block.\n\n{prompt}"
 
 PY_IMPORTS = "import heapq\nfrom math import floor, gcd\nimport random\nimport sys\nfrom typing import *\nfrom functools import *\nimport collections\nfrom collections import *\nfrom itertools import *\nfrom heapq import *\nfrom bisect import *\nfrom string import *\nimport math\nimport datetime\ninf = float('inf')\n"
+
+# START_PROMPT = "Solve the programming task below in a Python markdown code block.\n"
+START_PROMPT = "Please solve the programming task below using a self-contained Python code snippet in a markdown code block.\n"
+
+FORMAT_PROMPT = """
+# Format (please strictly follow this format to give the solution!):
+```python
+[your solution here]
+```
+
+DO NOT GIVE ANY EXAMPLE USAGE, JUST GIVE YOUR SOLUTION!
+"""
 
 
 def setup_logging(output_file):
@@ -104,17 +115,58 @@ def extract_code_from_string(solution_str):
 #     succ, output = code_exec(solution_code + "\n" + test_cases)
 #     return succ, output
 
-def code_eval(task, solution_str, additional_import=True):
+# def code_eval(task, solution_str, additional_import=True):
+#     solution_code = extract_code_from_string(solution_str)
+#     if additional_import:
+#         solution_code = PY_IMPORTS + solution_code
+#     test_cases = f"{task['test']}\n\ncheck({task['entry_point'].strip()})"
+#     final_code = solution_code + "\n" + test_cases
+#     result = run_code_in_sandbox(RunCodeRequest(code=final_code, language='python', run_timeout=30), connection_timeout=120)
+#     exec_time = result.run_result.execution_time
+#     succ = (result.status == RunStatus.Success)
+#     output = result.run_result.stderr
+#     return succ, output
+
+def minimize_stdio(inputs, outputs, max_n_tests=8):
+    stdin_list = []
+    stdout_list = []
+    for stdin, stdout in zip(inputs, outputs):
+        if isinstance(stdin, list):
+            stdin = "\n".join(stdin)
+        if isinstance(stdout, list):
+            stdout = "\n".join(stdout)
+        if sys.getsizeof(stdin) > 4 * 1024:
+            continue
+        stdout.replace("\r\n", "\n")
+        stdin_list.append(stdin)
+        stdout_list.append(stdout)
+
+    zipped = sorted(zip(stdin_list, stdout_list), key=lambda x: sys.getsizeof(x[0]))
+
+    if not zipped:
+        print("No tests found!")
+        return [], []
+
+    sorted_stdin, sorted_stdout = zip(*zipped)
+    
+    return [{'input': {'stdin': inp}, 'output': {'stdout': oup}} for inp, oup in zip(list(sorted_stdin[:max_n_tests]), list(sorted_stdout[:max_n_tests]))]
+
+def code_eval_taco(task, solution_str, additional_import=True):
     solution_code = extract_code_from_string(solution_str)
-    if additional_import:
-        solution_code = PY_IMPORTS + solution_code
-    test_cases = f"{task['test']}\n\ncheck({task['entry_point'].strip()})"
-    final_code = solution_code + "\n" + test_cases
-    result = run_code_in_sandbox(RunCodeRequest(code=final_code, language='python', run_timeout=30), connection_timeout=120)
-    exec_time = result.run_result.execution_time
-    succ = (result.status == RunStatus.Success)
-    output = result.run_result.stderr
-    return succ, output
+    in_out = json.loads(task['reward_model']['ground_truth'])
+    inputs, outputs = in_out['inputs'], in_out['outputs']
+    unitests = minimize_stdio(inputs, outputs)
+    
+    oj_data = {
+        "id": 1,                          # Unique identifier
+        "content": '',                     # Problem statement
+        "test": unitests
+    }
+    result = oj_in_sandbox(OJRequest(
+        completion=solution_code,
+        config=OJConfig(language='python', provided_data=oj_data, extra={'run_all_cases': True}, run_timeout=30)),
+                        connection_timeout=120)
+    return result.accepted, ''
 
 def code_gen_format(text):
     pattern = r"(### Question:)(.*?)(### Format:)"
@@ -141,7 +193,8 @@ def generation(task, meta, prompt_template, cot=False):
     # else:
     #     prompt = question
     
-    prompt = code_gen_format(task["query"]).format(question)
+    # prompt = code_gen_format(task["query"]).format(question)
+    prompt = START_PROMPT + question + FORMAT_PROMPT
     
     conversations.append({"role": "user", "content": prompt})
     # result = task
@@ -166,7 +219,7 @@ def generation(task, meta, prompt_template, cot=False):
     else:
         result['response'] = completion
     
-    result['test_success'], result['test_output'] = code_eval(task, result['response'])
+    result['test_success'], result['test_output'] = code_eval_taco(task, result['response'])
    
     return result
 
@@ -202,16 +255,18 @@ def main(args):
         content = [json.loads(line) for line in f]
     logging.info(f"总共读取{len(content)}条数据")
 
-    id_to_items = dict()
-    for item in content:
-        id_to_items[item['task_id']] = item
+    # id_to_items = dict()
+    # for item in content:
+    #     id_to_items[item['task_id']] = item
     
-    tasks = []
+    # tasks = []
     
-    for id in id_to_items:
-        item = id_to_items[id]
-        tasks.append(item)
-    logging.info(f"需要处理{len(tasks)}条数据")
+    # for id in id_to_items:
+    #     item = id_to_items[id]
+    #     tasks.append(item)
+    # logging.info(f"需要处理{len(tasks)}条数据")
+    
+    tasks = content
     
     meta_list = []
     urls = [args.url]
@@ -252,12 +307,12 @@ def main(args):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     
-    parser.add_argument('--input_file', type=str, default="./data/collab_code/LeetCodeDataset-v0.3.0-test-claude.jsonl")
-    parser.add_argument('--output_file', type=str, default="./data/collab_code/qwen-72b-instruct/LeetCodeDataset-v0.3.0-test-pred-core+supp.jsonl")
-    parser.add_argument('--model', type=str, default="qwen-72b-instruct")
+    parser.add_argument('--input_file', type=str, default="./data/taco/split_prompt/train-claude.jsonl")
+    parser.add_argument('--output_file', type=str, default="./data/taco/qwen-7b-instruct/train-core+supp.jsonl")
+    parser.add_argument('--model', type=str, default="qwen-7b-instruct")
     parser.add_argument('--api_key', type=str, default="zzw-114514")
     # parser.add_argument('--urls', type=json.loads, help='url lists of deployed models', default="["10.39.4.221"]")
-    parser.add_argument('--url', type=str, default="10.39.0.61")
+    parser.add_argument('--url', type=str, default="10.39.4.221")
     
     args = parser.parse_args()
     

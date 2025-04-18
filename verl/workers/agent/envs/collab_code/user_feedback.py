@@ -11,6 +11,52 @@ from .system_prompt import USER_SP, PY_IMPORTS
 from .sandbox_verify import RunCodeRequest, RunStatus, run_code_in_sandbox
 
 
+# def openai_complete(
+#     client: openai.OpenAI,
+#     messages: List,
+#     system_prompt: Optional[str] = None,
+#     sleep_time: float = 100,
+#     api_key: Optional[str] = None,
+#     api_base: Optional[str] = None,
+#     model: Optional[str] = None,
+#     try_times = 32,
+#     **kwargs,
+# ):
+#     openai.api_base = api_base
+#     openai.api_key = api_key
+#     retry = 0
+#     rate_error_flag = False
+#     while True:
+#         try:
+#             completion = client.chat.completions.create(
+#                 model=model,
+#                 messages=messages,
+#                 **kwargs
+#             )
+#             if 'error' in completion:
+#                 raise openai.OpenAIError(completion['error']['message'])
+
+#             rate_error_flag = False
+#             if 'n' not in kwargs:
+#                 choice = completion['choices'][0]
+#                 assert choice['message']['role'] == "assistant"
+#                 if 'content' in choice['message'] and choice['message']['content'] != "":
+#                     completion = choice['message']['content']
+#                 else:
+#                     raise openai.OpenAIError(f"Invalid {choice['message']=}")
+#             rate_error_flag = False
+#             return completion.choices[0].message.content
+#         except (openai.OpenAIError, AttributeError) as e:
+#             if "Please reduce" in str(e) or "Detected an error in the prompt." in str(e):
+#                 return ""
+#             else:
+#                 if not rate_error_flag:
+#                     rate_error_flag = True
+#                 retry += 1
+#                 if retry > try_times:
+#                     return ""
+#                 time.sleep(sleep_time)
+
 def openai_complete(
     client: openai.OpenAI,
     messages: List,
@@ -24,38 +70,15 @@ def openai_complete(
 ):
     openai.api_base = api_base
     openai.api_key = api_key
-    retry = 0
-    rate_error_flag = False
-    while True:
-        try:
-            completion = client.chat.completions.create(
-                model=model,
-                messages=messages,
-                **kwargs
-            )
-            if 'error' in completion:
-                raise openai.OpenAIError(completion['error']['message'])
-
-            rate_error_flag = False
-            if 'n' not in kwargs:
-                choice = completion['choices'][0]
-                assert choice['message']['role'] == "assistant"
-                if 'content' in choice['message'] and choice['message']['content'] != "":
-                    completion = choice['message']['content']
-                else:
-                    raise openai.OpenAIError(f"Invalid {choice['message']=}")
-            rate_error_flag = False
-            return completion.choices[0].message.content
-        except (openai.OpenAIError, AttributeError) as e:
-            if "Please reduce" in str(e) or "Detected an error in the prompt." in str(e):
-                return ""
-            else:
-                if not rate_error_flag:
-                    rate_error_flag = True
-                retry += 1
-                if retry > try_times:
-                    return ""
-                time.sleep(sleep_time)
+    try:
+        completion = client.chat.completions.create(
+            model=model,
+            messages=messages,
+            **kwargs
+        )
+        return completion.choices[0].message.content
+    except (openai.OpenAIError, AttributeError) as e:
+        return ''
 
 def match_think_tag(content):
     pattern = r'<think>.*?</think>'
@@ -89,15 +112,24 @@ class UserFeedback(ToolBase):
         # stop auto dialogue if found code solution in assistant's response
         answers = extract_tool_call_contents(self.code_start, self.code_end, current_response)
         if answers:
+            if len(self.convs) == 1:
+                return '',  0.0, True, {}
             solution_str = '\n'.join(answers)
+            # solution_str = answers[0]
             succ, stderr = self._code_eval(solution_str)
+            # succ = False
             reward = float(succ)
             return '', reward, True, {}
         
-        user_feedback, _ = self._single_conv(current_response)
+        self.convs.append({'role': 'user', 'content': current_response})
+        user_feedback, _ = self._single_conv()
+        # time.sleep(random.choice([0.01, 0.1, 1]))
+        # user_feedback = random.choice(['I am not sure', 'Yes', 'Close enough', 'Maybe you can try anothor way'])
         self.convs.append({'role': 'assistant', 'content': user_feedback})
-        
-        obs = "<|im_start|>user\n" + user_feedback + "<|im_end|>\n" + "<|im_start|>assistant\n"
+
+        # obs = "\n<|im_start|>user\n" + user_feedback + "<|im_end|>\n" + "<|im_start|>assistant\n"
+
+        obs = [{'role': 'user', 'content': user_feedback}]
         
         return obs, 0.0, False, None
 
@@ -119,13 +151,12 @@ class UserFeedback(ToolBase):
         self._create_convs()
     
     def _create_convs(self):
+        self.user_client = OpenAI(api_key=self.user_config['api_key'], base_url=self.user_config['url'])
         self.convs = [{'role': 'system', 'content': self.user_sp}]
     
-    def _single_conv(self, response):
-        user_client = OpenAI(api_key=self.user_config['api_key'], base_url=self.user_config['url'])
-        self.convs.append({'role': 'user', 'content': response})
+    def _single_conv(self):
         completion = openai_complete(
-            client=user_client,
+            client=self.user_client,
             messages=self.convs,
             api_base=self.user_config['url'],
             api_key=self.user_config['api_key'],
@@ -147,7 +178,7 @@ class UserFeedback(ToolBase):
         test_cases = self.env_info['test_cases']
         final_code = solution_code + "\n" + test_cases
         try:
-            result = run_code_in_sandbox(RunCodeRequest(code=final_code, language='python', run_timeout=30), connection_timeout=30)
+            result = run_code_in_sandbox(RunCodeRequest(code=final_code, language='python', run_timeout=30), connection_timeout=120)
             exec_time = result.run_result.execution_time
             succ = (result.status == RunStatus.Success)
             stderr = result.run_result.stderr
@@ -156,3 +187,4 @@ class UserFeedback(ToolBase):
             stderr = 'sandox error'
             print(stderr)
         return succ, stderr
+        # return False, ''

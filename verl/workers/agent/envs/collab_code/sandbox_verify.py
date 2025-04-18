@@ -146,14 +146,14 @@ def save_failed_request(request_data: Union[RunCodeRequest, OJRequest]):
        before_sleep=before_retry_sleep,
        retry_error_callback=on_retry_error)
 def run_code_in_sandbox(request: RunCodeRequest, connection_timeout) -> RunCodeResponse:
-    try:
-        result = requests.post(get_endpoint()+'/run_code', 
-                               json=request.model_dump(), 
-                               timeout=connection_timeout)
-    except requests.exceptions.ConnectionError as e:
-        save_failed_request(request)
-        logger.warning(f'malicious code, server aborted')
-        return None
+    # try:
+    result = requests.post(get_endpoint()+'/run_code', 
+                            json=request.model_dump(), 
+                            timeout=connection_timeout)
+    # except requests.exceptions.ConnectionError as e:
+    #     save_failed_request(request)
+    #     logger.warning(f'malicious code, server aborted')
+    #     return None
     
     if result.status_code == 500 and ('error_code' in json.loads(result.text) and json.loads(result.text)['error_code'] == 'function_proxy_error'):
         return None
@@ -171,14 +171,14 @@ def run_code_in_sandbox(request: RunCodeRequest, connection_timeout) -> RunCodeR
        before_sleep=before_retry_sleep,
        retry_error_callback=on_retry_error)
 def oj_in_sandbox(request: OJRequest, connection_timeout) -> RunCodeResponse:
-    try:
-        result = requests.post(get_oj_endpoint()+'/submit', 
-                               json=request.model_dump(), 
-                               timeout=connection_timeout)
-    except requests.exceptions.ConnectionError as e:
-        save_failed_request(request)
-        logger.warning(f'malicious code, server aborted')
-        return None
+    # try:
+    result = requests.post(get_oj_endpoint()+'/submit', 
+                            json=request.model_dump(), 
+                            timeout=connection_timeout)
+    # except requests.exceptions.ConnectionError as e:
+    #     save_failed_request(request)
+    #     logger.warning(f'malicious code, server aborted')
+    #     return None
     
     if result.status_code == 500 and ('error_code' in json.loads(result.text) and json.loads(result.text)['error_code'] == 'function_proxy_error'):
         return None

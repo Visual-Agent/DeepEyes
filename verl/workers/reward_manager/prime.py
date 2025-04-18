@@ -15,8 +15,9 @@
 import asyncio
 from concurrent.futures import ProcessPoolExecutor
 from functools import partial
-
+from typing import Callable, Optional
 import torch
+from transformers import PreTrainedTokenizer
 
 from verl import DataProto
 from verl.utils.reward_score import _default_compute_score
@@ -86,10 +87,17 @@ class PrimeRewardManager:
     The Reward Manager used in https://github.com/PRIME-RL/PRIME
     """
 
-    def __init__(self, tokenizer, num_examine, compute_score=None) -> None:
+    def __init__(
+        self,
+        tokenizer: PreTrainedTokenizer,
+        num_examine: int,
+        compute_score: Optional[Callable] = None,
+        reward_fn_key: str = 'data_source',
+    ) -> None:
         self.tokenizer = tokenizer
         self.num_examine = num_examine  # the number of batches of decoded responses to print to the console
         self.compute_score = compute_score or _default_compute_score
+        self.reward_fn_key = reward_fn_key
 
     def verify(self, data):
         """
@@ -101,7 +109,7 @@ class PrimeRewardManager:
         response_ids = data.batch['responses']
         sequences_str = self.tokenizer.batch_decode(response_ids, skip_special_tokens=True)
         ground_truth = [data_item.non_tensor_batch['reward_model']['ground_truth'] for data_item in data]
-        data_sources = data.non_tensor_batch['data_source']
+        data_sources = data.non_tensor_batch[self.reward_fn_key]
         extra_info = data.non_tensor_batch.get('extra_info', None)
 
         assert len(sequences_str) == len(ground_truth) == len(data_sources)
@@ -122,7 +130,7 @@ class PrimeRewardManager:
         data.batch['acc'] = torch.tensor(scores, dtype=torch.float32, device=prompt_ids.device)
         return scores
 
-    def __call__(self, data: DataProto):
+    def __call__(self, data: DataProto, return_dict: bool = False):
         """We will expand this function gradually based on the available datasets"""
 
         # If there is rm score, we directly return rm score. Otherwise, we compute via rm_score_fn
@@ -155,4 +163,7 @@ class PrimeRewardManager:
                 already_print_data_sources[data_source] += 1
                 print(sequences_str)
 
-        return reward_tensor
+        if return_dict:
+            return {"reward_tensor": reward_tensor}
+        else:
+            return reward_tensor
