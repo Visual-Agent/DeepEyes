@@ -128,6 +128,10 @@ class vLLMRollout(BaseRollout):
             enable_prefix_caching=True,
             trust_remote_code=trust_remote_code,
             seed=int(os.getenv("RANK", "0")) // tensor_parallel_size,
+            limit_mm_per_prompt=dict(
+                image=self.config.agent.max_vllm_images, 
+                video=self.config.agent.max_vllm_videos,
+            ),
         )
 
         # Offload vllm model to reduce peak memory usage
@@ -309,7 +313,8 @@ class vLLMRollout(BaseRollout):
             non_tensor_batch.pop('env_info')
         if 'multi_modal_data' in non_tensor_batch.keys():
             non_tensor_batch.pop('multi_modal_data')
-            non_tensor_batch.pop('origin_multi_modal_data')
+        if 'origin_multi_modal_data' in non_tensor_batch.keys():
+            non_tensor_batch.pop('origin_multi_modal_data', None)
 
         if self.config.agent.activate_agent:
             batch = batch.update(agent_proto.batch)

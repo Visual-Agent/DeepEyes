@@ -32,12 +32,27 @@ def write_to_jsonl(output_filename, samples):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--input_dir', default='/cpfs/user/fengyuan/code/github/R1-Searcher/data/eval_set/*.jsonl')
-    parser.add_argument('--output_dir', default='/cpfs/user/fengyuan/verl_data/r1-searcher/')
+    parser.add_argument('--output_dir', default='/cpfs/user/fengyuan/verl_data/mmsearch/')
 
     args = parser.parse_args()
 
-    sys_prompt = """The User asks a question, and the Assistant solves it. The Assistant first thinks about the reasoning process in the mind and then provides the User with the final answer. The output format of reasoning process and final answer are enclosed within <think> </think> and <answer> </answer> tags, respectively, i.e., "<think> reasoning process here </think><answer> final answer here </answer>".
-During the thinking process, **the Assistant can perform searching** for uncertain knowledge if necessary with the format of "<|begin_of_query|> search query (only list keywords, such as "keyword_1 keyword_2...")<|end_of_query|>". **A query must involve only a single triple**. Then, the search system will provide the Assistant with the retrieval information with the format of "<|begin_of_documents|> ...search results... <|end_of_documents|>"."""
+    sys_prompt = """You are a helpful assistant.
+
+# Tools
+
+You may call one or more functions to assist with the user query.
+
+You are provided with function signatures within <tools></tools> XML tags:
+<tools>
+{"type": "function", "function": {"name": "text_search", "description": "text search using search engine", "parameters": {"type": "object", "properties": {"keyword": {"type": "string", description": "Keywords for query."}, "max_results": {"type": "integer", "description": "Max number of search results. Value should be within the range 1-10. Defaults to 5."}}, "required": ["keyword"]}}}
+{"type": "function", "function": {"name": "news_search", "description": "search for latest news using search engine", "parameters": {"type": "object", "properties": {"keyword": {"type": "string", description": "Keywords for query."}, "max_results": {"type": "integer", "description": "Max number of search results. Value should be within the range 1-10. Defaults to 5."}}, "required": ["keyword"]}}}
+{"type": "function", "function": {"name": "browse", "description": "capture a website screenshot with a given url", "parameters": {"type": "object", "properties": {"url": {"type": "string", description": "the website url to be captured"}}, "required": ["keyword"]}}}
+</tools>
+
+For each function call, return a json object with function name and arguments within <tool_call></tool_call> XML tags:
+<tool_call>
+{"name": <function-name>, "arguments": <args-json-object>}
+</tool_call>"""
 
     stage1_data_fns = glob.glob(args.input_dir)
     stage1_data = []
@@ -47,6 +62,8 @@ During the thinking process, **the Assistant can perform searching** for uncerta
             for line in f:
                 line = json.loads(line)
                 prompt = line['question']
+                all_prompt = f"{prompt}\n\nPlease reason step by step, and put your final answer within <answer></answer>."
+
                 stage1_data.append({
                     "data_source": "rag_v2-test",
                     "prompt": [
@@ -56,10 +73,10 @@ During the thinking process, **the Assistant can perform searching** for uncerta
                         },
                         {
                             "role": "user",
-                            "content": prompt,
+                            "content": all_prompt,
                         }],
                     "question": line['question'],
-                    "env_name": "rag_v2",
+                    "env_name": "mm_search",
                     "ability": "qa",
                     "reward_model": {
                             "style": "rule",

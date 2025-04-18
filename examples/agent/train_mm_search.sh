@@ -1,14 +1,14 @@
 set -x
 
 # export CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7
-DATA_DIR=/cpfs/user/fengyuan/verl_data/r1-searcher
+DATA_DIR=/cpfs/user/fengyuan/verl_data/mmsearch
 
-PROJECT_NAME="agent_ppo_debug"
-EXPERIMENT_NAME="PPO_new_template_gt_return_v20"
+PROJECT_NAME="mm-search"
+ExPERIMENT_NAME="mm_obs_refpp_debug_v0"
 
 # export VLLM_ATTENTION_BACKEND=XFORMERS # vllm + qwen2-7b with flash_attn has some issues
 
-REF_MODEL_PATH=/cpfs/user/fengyuan/backbone/qwen25/Qwen2.5-7B
+REF_MODEL_PATH=/cpfs/user/fengyuan/backbone/qwen25/Qwen2.5-VL-7B-Instruct
 PYTHONUNBUFFERED=1 python3 -m verl.trainer.main_ppo \
     data.train_files=${DATA_DIR}/train.parquet \
     data.val_files=${DATA_DIR}/test.parquet \
@@ -16,19 +16,22 @@ PYTHONUNBUFFERED=1 python3 -m verl.trainer.main_ppo \
     data.max_prompt_length=1024 \
     data.max_response_length=10240 \
     data.return_raw_chat=True \
-    algorithm.adv_estimator=gae \
+    algorithm.adv_estimator=reinforce_plus_plus_baseline \
     algorithm.kl_ctrl.kl_coef=0.0 \
     algorithm.lam=1.0 \
     actor_rollout_ref.model.path=${REF_MODEL_PATH} \
     actor_rollout_ref.actor.optim.lr=1e-6 \
     actor_rollout_ref.actor.ppo_mini_batch_size=256 \
     actor_rollout_ref.actor.ppo_micro_batch_size_per_gpu=1 \
-    actor_rollout_ref.actor.entropy_coeff=0.001 \
+    actor_rollout_ref.actor.entropy_coeff=0.0 \
+    actor_rollout_ref.actor.use_kl_loss=True \
+    actor_rollout_ref.actor.kl_loss_coef=0.001 \
+    actor_rollout_ref.actor.kl_loss_type=mse \
     actor_rollout_ref.actor.checkpoint.contents=['model','hf_model','optimizer','extra'] \
     actor_rollout_ref.rollout.log_prob_micro_batch_size_per_gpu=2 \
     actor_rollout_ref.rollout.tensor_model_parallel_size=4 \
     actor_rollout_ref.rollout.name=vllm \
-    actor_rollout_ref.rollout.n=4 \
+    actor_rollout_ref.rollout.n=8 \
     actor_rollout_ref.rollout.temperature=1 \
     actor_rollout_ref.rollout.max_num_batched_tokens=32768 \
     actor_rollout_ref.rollout.gpu_memory_utilization=0.6 \
@@ -45,14 +48,8 @@ PYTHONUNBUFFERED=1 python3 -m verl.trainer.main_ppo \
     actor_rollout_ref.rollout.agent.max_turns=9 \
     actor_rollout_ref.rollout.agent.concurrent_workers=4 \
     actor_rollout_ref.rollout.agent.show_tqdm=True \
-    critic.optim.lr=1e-5 \
-    critic.cliprange_value=10 \
-    critic.model.path=${REF_MODEL_PATH} \
-    critic.model.fsdp_config.param_offload=True \
-    critic.model.fsdp_config.optimizer_offload=True \
-    critic.ppo_micro_batch_size_per_gpu=4 \
     trainer.logger=['console','wandb'] \
-    trainer.val_before_train=True \
+    trainer.val_before_train=False \
     trainer.n_gpus_per_node=8 \
     trainer.nnodes=${WORLD_SIZE} \
     trainer.save_freq=8 \

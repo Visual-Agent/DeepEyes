@@ -15,6 +15,9 @@ data:
   filter_overlong_prompts_workers: 1
   truncation: error
   image_key: images
+  custom_cls:
+      path: null
+      name: null
 
 actor_rollout_ref:
   hybrid_engine: True
@@ -114,11 +117,11 @@ actor_rollout_ref:
       activate_agent: False
       single_response_max_tokens: 32768
       single_obs_max_length: 32768
-      max_turns: 10000
+      max_turns: 50
       concurrent_workers: 1
       tool_name_key: env_name
       tool_meta_key: null
-      custom_stop: [ '<|end_of_query|>', '</answer>' ]
+      custom_stop: ['</tool_call>']
       show_tqdm: True
       user_model:
         level: low
@@ -128,6 +131,8 @@ actor_rollout_ref:
         temperature: 0.7
         max_tokens: 512
       vl_model_path: ${actor_rollout_ref.model.path}
+      max_vllm_images: 50
+      max_vllm_videos: 2
 
 critic:
   rollout_n: ${actor_rollout_ref.rollout.n}

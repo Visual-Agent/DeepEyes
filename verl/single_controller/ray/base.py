@@ -14,6 +14,7 @@
 
 import logging
 import time
+import traceback
 from typing import Dict, List, Any, Tuple, Optional
 
 import ray
@@ -40,7 +41,12 @@ def func_generator(self, method_name, dispatch_fn, collect_fn, execute_fn, block
         args, kwargs = dispatch_fn(self, *args, **kwargs)
         output = execute_fn(method_name, *args, **kwargs)
         if blocking:
-            output = ray.get(output)
+            try:
+                output = ray.get(output)
+            except Exception as err:
+                print(f' [ERROR ray] {err=}')
+                error_stack = str(traceback.format_exc())
+                raise ValueError(error_stack)
         output = collect_fn(self, output)
         return output
 

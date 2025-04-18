@@ -44,9 +44,16 @@ def _default_compute_score(data_source, solution_str, ground_truth, extra_info=N
         from . import geo3k
         res = geo3k.compute_score(solution_str, ground_truth)
 
-    elif data_source in ['rag', 'rag_v2']:
+    elif data_source in ['rag_v2-train']:
         from . import agent
         res = agent.compute_score(solution_str, ground_truth)
+    elif data_source in ['rag_v2-test']:
+        from . import agent
+        res = agent.compute_score_eval(solution_str, ground_truth)
+
+    elif data_source in ['vl_agent']:
+        from . import vl_agent
+        res = vl_agent.compute_score(solution_str, ground_truth, extra_info)
 
     elif data_source in ["frozenlake"]:
         res = 0.0

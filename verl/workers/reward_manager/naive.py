@@ -91,7 +91,7 @@ class NaiveRewardManager:
             else:
                 reward = score
 
-            reward_tensor[i, valid_response_length - 1] = reward
+            reward_tensor[i, valid_response_length - 1] += reward
 
             # eos_idx = torch.nonzero(action_or_attn_mask[i, prompt_length: prompt_length + valid_response_length])[-1]
             # reward_tensor[i, eos_idx] = score
@@ -110,11 +110,10 @@ class NaiveRewardManager:
             #     prompt_ids=valid_prompt_ids.cpu().numpy().tolist(),
             #     response_ids=valid_response_ids.cpu().numpy().tolist(),
             #     action_mask=action_mask.cpu().numpy().tolist(),
-            #     reward_list=reward_tensor[i, :valid_response_length].cpu().numpy().tolist(),
             # )
 
             # debug_output_str = json.dumps(debug_output, ensure_ascii=False)
-            # with open('/cpfs/user/fengyuan/code/github/verl/checkpoints/agent_ppo_debug/debug_rewards_v2.jsonl', 'a+') as fout:
+            # with open('/cpfs/user/fengyuan/code/github/verl/checkpoints/agent_ppo_debug/ppo_rewards_gt7b_v18.jsonl', 'a+') as fout:
             #     fout.write(debug_output_str + '\n')
 
             if data_source not in already_print_data_sources:

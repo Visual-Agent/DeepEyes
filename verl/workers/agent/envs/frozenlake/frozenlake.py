@@ -77,11 +77,12 @@ class FrozenLakeTool(ToolBase):
         if action in self.action_map:
             action = self.action_map[action]
         else:
-            print(f"action is not valid")
+            print(f"action is invalid")
             return self.render(train=True), 0, False, {}
         player_pos, self.reward, done, _, _ = self.env.step(action)
         obs = self.render(train=True)
-
+        if self.reward == 1:
+            print("success!!!")
         return obs, self.reward, done, {}
 
     def obs_transform(self, origin_obs):

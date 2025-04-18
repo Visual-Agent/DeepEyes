@@ -22,18 +22,17 @@ def _concat_vllm_input(prompt_token_ids, response_token_ids, tokenizer=None):
         response_token_ids = torch.masked_select(response_token_ids, valid_token_mask)
 
     if isinstance(prompt_token_ids, torch.Tensor):
-        return torch.cat([
+        output_tensor = torch.cat([
             prompt_token_ids,
             response_token_ids.to(prompt_token_ids.device),
         ], dim=-1)
-    elif isinstance(prompt_token_ids, np.ndarray):
-        return np.concatenate([
+        return output_tensor.cpu().numpy().flatten().tolist()
+    else:
+        output_array = np.concatenate([
             prompt_token_ids,
             response_token_ids.cpu().numpy(),
         ], axis=-1)
-    else:
-        prompt_token_ids.extend(response_token_ids.cpu().tolist())
-        return prompt_token_ids
+        return output_array.flatten().tolist()
 
 
 def _merge_multi_modal_inputs(mm_input, other):
@@ -73,6 +72,7 @@ def _preprocess_multi_modal_inputs(prompt_str, processor, **kwargs):
     image_inputs = processor.image_processor(input_mm_data["image"], return_tensors='pt')
     image_grid_thw = image_inputs['image_grid_thw']
     mm_inputs = {key: val for key, val in image_inputs.items()}
+    print(f' [DENIG mm_input] {mm_inputs.keys()=}')
 
     if image_grid_thw is not None:
         merge_length = processor.image_processor.merge_size**2
@@ -100,9 +100,11 @@ def agent_rollout_loop(config, vllm_engine, vllm_inputs, prompts, multi_modal_in
     agent_sampling_params.max_tokens = max_generated_tokens
 
     # support custom stop specified in dataset, like </search>, ```, etc.
-    if config.agent.custom_stop:
+    custom_stop = list(config.agent.custom_stop)
+    if custom_stop:
         prev_stop = sampling_params.stop if sampling_params.stop else []
-        agent_sampling_params.stop = prev_stop + config.agent.custom_stop
+        agent_sampling_params.stop = prev_stop + custom_stop
+        print(f' [DEBUG stop] {type(prev_stop)=}, {type(custom_stop)=}, {type(agent_sampling_params.stop)=}')
 
     if multi_modal_inputs is not None:
         multi_modal_inputs = multi_modal_inputs.tolist()
@@ -123,6 +125,7 @@ def agent_rollout_loop(config, vllm_engine, vllm_inputs, prompts, multi_modal_in
     reward_tensor_list = []
     active_mask = []
     mm_input_list = []
+    tool_call_cnt_list = []
 
     # interleaving inputs if sampling_params.n > 1
     for i in range(batch_size):
@@ -137,6 +140,7 @@ def agent_rollout_loop(config, vllm_engine, vllm_inputs, prompts, multi_modal_in
             reward_tensor_list.append(reward_tensor)
             active_mask.append(True)
             mm_input_list.append(multi_modal_inputs[i])
+            tool_call_cnt_list.append(0)
 
     max_total_length = config.prompt_length + config.response_length
     for step in range(config.agent.max_turns):
@@ -180,6 +184,7 @@ def agent_rollout_loop(config, vllm_engine, vllm_inputs, prompts, multi_modal_in
             if done or step == config.agent.max_turns - 1:
                 active_mask[idx] = False
                 continue
+            tool_call_cnt_list[idx] += 1
 
             # process obs tokens and images
             if 'prompt_token_ids_vllm' in obs.keys():
@@ -204,20 +209,18 @@ def agent_rollout_loop(config, vllm_engine, vllm_inputs, prompts, multi_modal_in
 
             mm_data = obs.get('multi_modal_data', {})
             if 'image' in mm_data.keys():
-                if 'multi_modal_data' not in vllm_input_list[idx]:
+                if 'multi_modal_data' not in vllm_input_list[idx].keys():
                     vllm_input_list[idx]['multi_modal_data'] = {"image": []}
+                print(f' [DEBUG img] {idx=} before update {len(mm_data["image"])=}')
                 vllm_input_list[idx]['multi_modal_data']['image'] += mm_data['image']
-                print(f' [DEBUG img] update num_images={len(mm_data["image"])}')
+                print(f' [DEBUG img] {idx=} after update {len(vllm_input_list[idx]["multi_modal_data"]["image"])=}')
 
             mm_input = obs.get('multi_modal_inputs', {})
             if mm_input:
+                print(f' [DEBUG img] {idx=} merge mm_input {mm_input_list[idx].keys()} + {mm_input.keys()}')
                 mm_input_list[idx] = _merge_multi_modal_inputs(mm_input_list[idx], mm_input)
 
-            if isinstance(vllm_input_list[idx]['prompt_token_ids'], list):
-                prompt_token_length = len(vllm_input_list[idx]['prompt_token_ids'])
-            else:
-                prompt_token_length = vllm_input_list[idx]['prompt_token_ids'].shape[-1]
-            if running_states[idx].shape[-1] >= max_total_length or prompt_token_length >= max_total_length:
+            if running_states[idx].shape[-1] >= max_total_length or len(vllm_input_list[idx]['prompt_token_ids']) >= max_total_length:
                 active_mask[idx] = False
 
     env.close()
@@ -251,6 +254,7 @@ def agent_rollout_loop(config, vllm_engine, vllm_inputs, prompts, multi_modal_in
     reward_tensor_list = [reward[: max_total_length] for reward in reward_tensor_list]
     reward_tensor = pad_2d_list_to_length(reward_tensor_list, 0.0, max_total_length).to(target_device)
 
+    tool_call_tensor = torch.tensor(tool_call_cnt_list, dtype=torch.float32).to(target_device).unsqueeze(1)
     return DataProto.from_dict(
         tensors={
             "response": state_tensor[:, -config.response_length: ],
@@ -258,6 +262,7 @@ def agent_rollout_loop(config, vllm_engine, vllm_inputs, prompts, multi_modal_in
             "attention_mask": attn_mask_tensor,
             "position_ids": position_ids_tensor,
             "env_reward": reward_tensor[:, -config.response_length: ],
+            "tool_cnt": tool_call_tensor,
         },
         non_tensors={"multi_modal_inputs": mm_input_list} if processor is not None else None
     )
@@ -314,7 +319,7 @@ def execute_tool_call(sample, tokenizer=None, processor=None, pbar=None):
             obs_token_ids_model = tokenizer.encode(prompt_str_model, add_special_tokens=False, return_tensors='pt')[0]
 
         elif len(chat_list) > 0:
-            obs_str = tokenizer.apply_chat_template(tool_result['chat'], add_generation_prompt=True, tokenize=False)
+            obs_str = tokenizer.apply_chat_template(chat_list, add_generation_prompt=True, tokenize=False)
             obs_str_vllm, obs_str_model, mm_inputs = _preprocess_multi_modal_inputs(obs_str, processor, **tool_result)
             obs_token_ids_vllm = tokenizer.encode(obs_str_vllm, add_special_tokens=False, return_tensors='pt')[0]
             obs_token_ids_model = tokenizer.encode(obs_str_model, add_special_tokens=False, return_tensors='pt')[0]
