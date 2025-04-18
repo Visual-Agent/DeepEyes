@@ -67,11 +67,11 @@ def run_ppo(config) -> None:
         # this is for local ray cluster
         ray.init(runtime_env={
             'env_vars': {
-                'TOKENIZERS_PARALLELISM': 'true',
+                'TOKENIZERS_PARALLELISM': os.environ.get('TOKENIZERS_PARALLELISM', 'true'),
                 'NCCL_DEBUG': 'WARN',
                 'VLLM_LOGGING_LEVEL': 'WARN'
-            }
-        })
+            },
+        }, ignore_reinit_error=True)
 
     runner = TaskRunner.remote()
     ray.get(runner.run.remote(config))

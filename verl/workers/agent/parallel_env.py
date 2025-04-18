@@ -100,9 +100,11 @@ def agent_rollout_loop(config, vllm_engine, vllm_inputs, prompts, multi_modal_in
     agent_sampling_params.max_tokens = max_generated_tokens
 
     # support custom stop specified in dataset, like </search>, ```, etc.
-    if config.agent.custom_stop:
+    custom_stop = list(config.agent.custom_stop)
+    if custom_stop:
         prev_stop = sampling_params.stop if sampling_params.stop else []
-        agent_sampling_params.stop = prev_stop + config.agent.custom_stop
+        agent_sampling_params.stop = prev_stop + custom_stop
+        print(f' [DEBUG stop] {type(prev_stop)=}, {type(custom_stop)=}, {type(agent_sampling_params.stop)=}')
 
     if multi_modal_inputs is not None:
         multi_modal_inputs = multi_modal_inputs.tolist()
@@ -123,6 +125,7 @@ def agent_rollout_loop(config, vllm_engine, vllm_inputs, prompts, multi_modal_in
     reward_tensor_list = []
     active_mask = []
     mm_input_list = []
+    tool_call_cnt_list = []
 
     # interleaving inputs if sampling_params.n > 1
     for i in range(batch_size):
@@ -137,6 +140,7 @@ def agent_rollout_loop(config, vllm_engine, vllm_inputs, prompts, multi_modal_in
             reward_tensor_list.append(reward_tensor)
             active_mask.append(True)
             mm_input_list.append(multi_modal_inputs[i])
+            tool_call_cnt_list.append(0)
 
     max_total_length = config.prompt_length + config.response_length
     for step in range(config.agent.max_turns):
@@ -175,6 +179,7 @@ def agent_rollout_loop(config, vllm_engine, vllm_inputs, prompts, multi_modal_in
             if done or step == config.agent.max_turns - 1:
                 active_mask[idx] = False
                 continue
+            tool_call_cnt_list[idx] += 1
 
             # process obs tokens and images
             if 'prompt_token_ids_vllm' in obs.keys():
@@ -244,6 +249,7 @@ def agent_rollout_loop(config, vllm_engine, vllm_inputs, prompts, multi_modal_in
     reward_tensor_list = [reward[: max_total_length] for reward in reward_tensor_list]
     reward_tensor = pad_2d_list_to_length(reward_tensor_list, 0.0, max_total_length).to(target_device)
 
+    tool_call_tensor = torch.tensor(tool_call_cnt_list, dtype=torch.float32).to(target_device).unsqueeze(1)
     return DataProto.from_dict(
         tensors={
             "response": state_tensor[:, -config.response_length: ],
@@ -251,6 +257,7 @@ def agent_rollout_loop(config, vllm_engine, vllm_inputs, prompts, multi_modal_in
             "attention_mask": attn_mask_tensor,
             "position_ids": position_ids_tensor,
             "env_reward": reward_tensor[:, -config.response_length: ],
+            "tool_cnt": tool_call_tensor,
         },
         non_tensors={"multi_modal_inputs": mm_input_list} if processor is not None else None
     )

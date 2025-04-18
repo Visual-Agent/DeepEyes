@@ -4,10 +4,13 @@ set -x
 DATA_DIR=/cpfs/user/honglingyi/DATA/LLM/VL_Agent/parquets
 
 PROJECT_NAME="agent_vlagent"
-EXPERIMENT_NAME="qwen25_vl_7b_instruct_vl_agent_v1"
+EXPERIMENT_NAME="qwen25_vl_7b_instruct_vl_agent_v2"
 
+# export TOKENIZERS_PARALLELISM=false
 export SAVE_CHECKPOINT_DIR=/diancpfs/user/fengyuan/verl_checkpoints
-export VLLM_ATTENTION_BACKEND=XFORMERS # vllm + qwen2-7b with flash_attn has some issues
+
+# NOTE: refer to https://verl.readthedocs.io/en/latest/README_vllm0.8.html
+# export VLLM_ATTENTION_BACKEND=XFORMERS # vllm + qwen2-7b with flash_attn has some issues
 
 DEBUG_DATASET_TRAIN=/cpfs/user/fengyuan/code/github/verl/data/geo3k/train_agent.parquet
 DEBUG_DATASET_TEST=/cpfs/user/fengyuan/code/github/verl/data/geo3k/test_agent.parquet
@@ -34,7 +37,7 @@ PYTHONUNBUFFERED=1 python3 -m verl.trainer.main_ppo \
     actor_rollout_ref.actor.entropy_coeff=0.0001 \
     actor_rollout_ref.actor.checkpoint.contents=['model','hf_model','optimizer','extra'] \
     actor_rollout_ref.rollout.log_prob_micro_batch_size_per_gpu=2 \
-    actor_rollout_ref.rollout.tensor_model_parallel_size=4 \
+    actor_rollout_ref.rollout.tensor_model_parallel_size=1 \
     actor_rollout_ref.rollout.name=vllm \
     actor_rollout_ref.rollout.n=8 \
     actor_rollout_ref.rollout.max_num_batched_tokens=32768 \
@@ -51,7 +54,7 @@ PYTHONUNBUFFERED=1 python3 -m verl.trainer.main_ppo \
     actor_rollout_ref.rollout.agent.single_response_max_tokens=2048 \
     actor_rollout_ref.rollout.agent.single_obs_max_length=8192 \
     actor_rollout_ref.rollout.agent.max_turns=9 \
-    actor_rollout_ref.rollout.agent.concurrent_workers=2 \
+    actor_rollout_ref.rollout.agent.concurrent_workers=1 \
     actor_rollout_ref.rollout.agent.show_tqdm=True \
     trainer.critic_warmup=0 \
     trainer.logger=['console','wandb'] \

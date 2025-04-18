@@ -47,6 +47,8 @@ from verl.utils.tracking import ValidationGenerationsLogger
 from torch.utils.data import Dataset, RandomSampler, SequentialSampler
 from torchdata.stateful_dataloader import StatefulDataLoader
 
+from verl.trainer.ppo.metric_utils import compute_agent_metrics
+
 WorkerType = Type[Worker]
 
 
@@ -996,6 +998,10 @@ class RayPPOTrainer(object):
                 # TODO: implement actual tflpo and theoretical tflpo
                 n_gpus = self.resource_pool_manager.get_n_gpus()
                 metrics.update(compute_throughout_metrics(batch=batch, timing_raw=timing_raw, n_gpus=n_gpus))
+
+                if self.config.actor_rollout_ref.rollout.agent.activate_agent:
+                    metrics.update(compute_agent_metrics(batch=batch))
+
                 # TODO: make a canonical logger that supports various backend
                 logger.log(data=metrics, step=self.global_steps)
 

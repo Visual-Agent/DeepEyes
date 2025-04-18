@@ -187,6 +187,18 @@ def compute_throughout_metrics(batch: DataProto, timing_raw: Dict[str, float], n
     }
 
 
+def compute_agent_metrics(batch: DataProto):
+    if 'tool_cnt' not in batch.batch.keys():
+        return {}
+
+    tool_cnt_tensor = batch.batch.pop('tool_cnt').detach().cpu()
+    return {
+        "agent/tool_call_mean": torch.mean(tool_cnt_tensor).item(),
+        "agent/tool_call_max": torch.max(tool_cnt_tensor).item(),
+        "agent/tool_call_min": torch.min(tool_cnt_tensor).item(),
+    }
+
+
 def bootstrap_metric(data: list[Any],
                      subset_size: int,
                      reduce_fns: list[Callable[[np.ndarray], float]],
