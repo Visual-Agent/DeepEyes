@@ -9,7 +9,7 @@ export NCCL_DEBUG=WARN
 export WANDB_API_KEY=7d84dc21bf59f2e0dd3f214b75a53786cd8fc5d8
 
 PROJECT_NAME=agent_grpo_vlagent
-EXPERIMENT_NAME=visual_agent_env_v2_model_v1_nooffload
+EXPERIMENT_NAME=visual_agent_env_v2_model_v1_n4
 BASE_MODEL=/cpfs/user/zhengziwei/HF_HOME/hub/models--Qwen--Qwen2.5-VL-7B-Instruct/snapshots/6e6556e8ce728c7b3e438d75ebf04ec93403dc19
 VISUAL_DATASET_TRAIN=/cpfs/user/honglingyi/DATA/LLM/VL_Agent/parquets/vl_agent_V1_train_box.parquet
 VISUAL_DATASET_TEST=/cpfs/user/honglingyi/DATA/LLM/VL_Agent/parquets/vl_agent_V1_test_box.parquet
@@ -36,7 +36,7 @@ PYTHONUNBUFFERED=1 python3 -m verl.trainer.main_ppo \
     actor_rollout_ref.rollout.log_prob_micro_batch_size_per_gpu=1 \
     actor_rollout_ref.rollout.tensor_model_parallel_size=1 \
     actor_rollout_ref.rollout.name=vllm \
-    actor_rollout_ref.rollout.n=8 \
+    actor_rollout_ref.rollout.n=4 \
     actor_rollout_ref.rollout.max_num_batched_tokens=32768 \
     actor_rollout_ref.rollout.gpu_memory_utilization=0.6 \
     actor_rollout_ref.rollout.enforce_eager=False \
