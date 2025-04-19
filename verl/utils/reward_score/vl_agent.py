@@ -160,8 +160,8 @@ def compute_score(predict_str: str, ground_truth: str, extra_info=None) -> float
             acc_reward = 0.0
 
     tool_reward = 1.0 if count_vision_1 > 1 else 0.0
-    format_reward = -1.0 if is_format_error else 0.0
-    return 1.0 * acc_reward + 0.5 * format_reward + 0.5 * tool_reward
+    format_reward = 0.0 if is_format_error else 1.0
+    return 0.8 * acc_reward + 0.2 * format_reward + 1.0 * tool_reward
 
 
 if __name__ == '__main__':

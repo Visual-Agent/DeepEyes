@@ -181,6 +181,10 @@ def agent_rollout_loop(config, vllm_engine, vllm_inputs, prompts, multi_modal_in
             running_attn_masks[idx] = torch.cat([running_attn_masks[idx], action_mask])
 
             # Ensure the last token is not obs
+            if running_states[idx].shape[-1] >= max_total_length or len(vllm_input_list[idx]['prompt_token_ids']) >= max_total_length:
+                active_mask[idx] = False
+                continue
+
             if done or step == config.agent.max_turns - 1:
                 active_mask[idx] = False
                 continue

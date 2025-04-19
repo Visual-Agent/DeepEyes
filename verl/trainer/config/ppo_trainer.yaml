@@ -121,7 +121,7 @@ actor_rollout_ref:
       concurrent_workers: 1
       tool_name_key: env_name
       tool_meta_key: null
-      custom_stop: ['</tool_call>']
+      custom_stop: []
       show_tqdm: True
       user_model:
         level: low
