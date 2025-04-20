@@ -2,6 +2,7 @@
 from .envs.rag_engine.rag_engine import RAGEngineEnv
 from .envs.rag_engine.rag_engine_v2 import RAGEngineEnvV2
 from .envs.visual_agent.vl_agent_v1 import VLAgentEnvV1
+from .envs.visual_agent.vl_agent_v2 import VLAgentEnvV2
 from .envs.mm_process_engine.visual_toolbox import VisualToolBox
 
 try:

@@ -11,13 +11,20 @@ import json
 
 class VisualToolBox(ToolBase):
     name = "visual_toolbox"
-    
+    user_prompt = "Here is the observation returned after you executed the tool call."
+
     def __init__(self, _name, _desc, _params, **kwargs):
         super().__init__(
             name=self.name,
         )
-        self.current_image = None  # To store the current image being processed
+        self.chatml_history = []
+        self.multi_modal_data = None  # To store the current image being processed
 
+
+    def extract_answer(self, action_string: str) -> Dict[str, any]:
+        answer = re.search(r'<answer>(.*?)</answer>', action_string, re.DOTALL)
+        return answer
+        
     def extract_action(self, action_string: str) -> Dict[str, Any]:
         """
         Extracts the tool call from the action string.
@@ -56,6 +63,9 @@ class VisualToolBox(ToolBase):
             info: Additional info.
         """
         try:
+            answer = self.extract_answer(action_string)
+            if answer:
+                return "", 0.0, True, {}
             tool_call = self.extract_action(action_string)
             tool_name = tool_call["name"]
             args = tool_call["arguments"]
@@ -64,25 +74,27 @@ class VisualToolBox(ToolBase):
                 # Zoom in by cropping the image
                 image_path = args["image_path"]
                 bbox = args["bbox"]
-                img = Image.open(image_path)
+                # img = Image.open(image_path)
+                img = self.multi_modal_data['image'][0]
                 cropped_img = img.crop(bbox)
-                self.current_image = cropped_img
+                current_image = cropped_img
                 
             elif tool_name == "image_rotate_tool":
                 # Rotate the image
                 image_path = args["image_path"]
                 angle = args["angle"]
-                img = Image.open(image_path)
+                # img = Image.open(image_path)
+                img = self.multi_modal_data['image'][0]
                 rotated_img = img.rotate(angle)
-                self.current_image = rotated_img
+                current_image = rotated_img
                 
             else:
                 raise ValueError(f"Unknown tool name: {tool_name}")
             
             # Prepare the observation
             obs = {
-                "prompt_token_ids": "<|im_start|>user\nHere is your observation.<|im_end|>\n<|im_start|>assistant\n",
-                "multi_model_data": self.current_image,
+                "prompt": "<|im_end|>\n<|im_start|>user\n" +"<image>" + self.user_prompt + "<|im_end|>\n<|im_start|>assistant",
+                "multi_model_data": {"image": [current_image]}
             }
             reward = 0.1  # Reward for successful tool call with correct JSON
             done = False
@@ -94,7 +106,7 @@ class VisualToolBox(ToolBase):
             # Return an error observation if something goes wrong
             print(f'DEBUG: Execute WRONG - {str(e)}')
             obs = {
-                "prompt_token_ids": f"<|im_start|>user\nError: {str(e)}<|im_end|>\n<|im_start|>assistant\n",
+                "prompt": f"<|im_start|>user\nError: {str(e)}<|im_end|>\n<|im_start|>assistant\n",
                 "multi_model_data": None,
             }
             reward = 0.0  # No reward for failed execution
@@ -102,12 +114,11 @@ class VisualToolBox(ToolBase):
             info = {"error": str(e), "status": "failed"}
             return obs, reward, done, info
 
-    def reset(self, *args, **kwargs):
-        """
-        Reset the environment to its initial state.
-        """
-        self.current_image = None
-        self.reward = 0.0
+    def reset(self, raw_prompt, multi_modal_data, origin_multi_modal_data, **kwargs):
+        self.chatml_history = raw_prompt
+        self.multi_modal_data = origin_multi_modal_data
+        assert 'image' in self.multi_modal_data.keys(), f'[ERROR] {origin_multi_modal_data=}'
+        assert len(self.multi_modal_data['image']) > 0, f'[ERROR] {self.multi_modal_data["image"]=}'
 
 
 if __name__ == "__main__":
