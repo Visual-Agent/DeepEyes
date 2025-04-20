@@ -14,7 +14,7 @@ from PIL import Image
 import base64
 
 
-query_text = """{question} First output the thinking process in <think> </think> tags and then output the final answer in <answer> </answer> tags. Output the final answer in JSON format:
+query_text = """{question} First output the thinking process in <think> </think> tags and then output your grounding results related to answer in question in <crop> </crop> tags. Output the grounding results in JSON format:
 ```json
 [
     {{"bbox_2d": [x1, y1, x2, y2], "label": "label name"}}
@@ -49,10 +49,15 @@ def make_map_fn(split, data_source, env_name):
             "data_source": data_source,
             "env_name": env_name,
             "prompt": [
-            {
-                "role": "user",
-                "content": query_text.format(question=question)
-            }],
+                {
+                    "role": "system",
+                    "content": "",
+                },
+                {
+                    "role": "user",
+                    "content": query_text.format(question=question),
+                },
+            ],
             'images': images,
             "ability": "vl",
             "reward_model": {

@@ -16,7 +16,7 @@ from verl.workers.agent.tool_envs import ToolBase, extract_tool_call_contents
 class VLAgentEnvV3(ToolBase):
     name = "vl_agent_v3"
     
-    user_prompt = "<image>\nHere is the zoomed in image for your grounding region {}.\nIf the images provided above are sufficient to answer the user's question, please put your final answer within <answer></answer>. Otherwise generate a new grouding in JSON format, and the zoomed-in image of your grounding will be provided in next turn."
+    user_prompt = "<image>\nHere is the zoomed in image for your grounding region {}.\nIf the images provided above are sufficient to answer the user's question, please put your final answer in <answer> </answer> tags. Otherwise generate a new grouding in JSON format, and the zoomed-in image of your grounding will be provided in next turn."
     answer_start = '<answer>'
     answer_end = '</answer>'
 
@@ -35,7 +35,7 @@ class VLAgentEnvV3(ToolBase):
 
         pattern = re.compile(r'```json\s*([\s\S]*?)```', re.DOTALL)
         action_list = pattern.findall(action_string)
-        action_list = [action.strip() for action in action_list]
+        action_list = [item for action in action_list for item in eval(action.strip())]
         if not action_list:
             return '', 0.0, True, {}
 

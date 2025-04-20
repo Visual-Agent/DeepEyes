@@ -150,16 +150,11 @@ def agent_rollout_loop(config, vllm_engine, vllm_inputs, prompts, multi_modal_in
 
         active_indices = [idx for idx, is_active in enumerate(active_mask) if is_active]
         active_vllm_inputs = [vinput for vinput, is_active in zip(vllm_input_list, active_mask) if is_active]
-        # breakpoint()
         actions = vllm_engine.generate(
             prompts=active_vllm_inputs,
             sampling_params=agent_sampling_params,
             use_tqdm=False
         )
-        # if step >= 1:
-        # print(f'STEP {step}', [act.outputs[0].text for act in actions][:20])
-        # print(f'STEP {step}:', tokenizer.batch_decode([v['prompt_token_ids'] for v in active_vllm_inputs[:5]]))
-
         observations, rewards, dones, info = env.step(actions)
 
         for idx, obs, act, rew, done in zip(active_indices, observations, actions, rewards, dones):
