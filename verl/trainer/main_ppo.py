@@ -60,21 +60,22 @@ def main(config):
 
 
 def run_ppo(config) -> None:
-    # TODO(linjunrong.ocss884): this ENV is left for resolving SGLang conflict with ray devices
-    # isolation, will solve in the future
-    os.environ["ENSURE_CUDA_VISIBLE_DEVICES"] = os.environ.get('CUDA_VISIBLE_DEVICES', '')
+    env_vars = {'TOKENIZERS_PARALLELISM': 'true', 'NCCL_DEBUG': 'WARN', 'VLLM_LOGGING_LEVEL': 'WARN', 'RAY_DEBUG':"0"}
+    if getattr(config.actor_rollout_ref.rollout, "vllm_use_v1", False):
+        env_vars['VLLM_USE_V1'] = "1"
+    if getattr(config, 'debug', False):
+        env_vars['RAY_DEBUG'] = "1"
     if not ray.is_initialized():
         # this is for local ray cluster
-        ray.init(runtime_env={
-            'env_vars': {
-                'TOKENIZERS_PARALLELISM': os.environ.get('TOKENIZERS_PARALLELISM', 'true'),
-                'NCCL_DEBUG': 'WARN',
-                'VLLM_LOGGING_LEVEL': 'WARN'
-            },
-        }, ignore_reinit_error=True)
-
-    runner = TaskRunner.remote()
-    ray.get(runner.run.remote(config))
+        # ray.init(runtime_env={'env_vars': {'TOKENIZERS_PARALLELISM': 'true', 'NCCL_DEBUG': 'WARN'}})
+        ray.init(runtime_env={'env_vars': env_vars})
+    if getattr(config, "vs_debug", False):
+        print(f'LOCAL VSCODE DEBUG')
+        runner = TaskRunner
+        runner.run(config)
+    else:
+        runner = TaskRunner.remote()
+        ray.get(runner.run.remote(config))
 
 
 @ray.remote(num_cpus=1)  # please make sure main_task is not scheduled on head

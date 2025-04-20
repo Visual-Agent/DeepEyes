@@ -22,9 +22,16 @@ from typing import List, Union, Dict, Any
 
 
 class Tracking(object):
-    supported_backend = ["wandb", "mlflow", "swanlab", "vemlp_wandb", "tensorboard", "console"]
+    supported_backend = ["wandb", "mlflow", "swanlab", "vemlp_wandb", "tensorboard", "console", "rl_logging_board"]
 
-    def __init__(self, project_name, experiment_name, default_backend: Union[str, List[str]] = 'console', config=None):
+    def __init__(self, 
+        trainer_config: dict,
+        config=None
+    ):  
+        project_name=trainer_config.trainer.project_name
+        experiment_name=trainer_config.trainer.experiment_name
+        default_backend=trainer_config.trainer.logger
+
         if isinstance(default_backend, str):
             default_backend = [default_backend]
         for backend in default_backend:
@@ -35,6 +42,7 @@ class Tracking(object):
                 assert backend in self.supported_backend, f'{backend} is not supported'
 
         self.logger = {}
+        self.default_backend = default_backend
 
         if 'tracking' in default_backend or 'wandb' in default_backend:
             import wandb
@@ -94,17 +102,34 @@ class Tracking(object):
             self.logger['vemlp_wandb'] = vemlp_wandb
 
         if 'tensorboard' in default_backend:
-            self.logger['tensorboard'] = _TensorboardAdapter()
+            from verl.utils.tensorboard import TensorboardLogger
+            self.logger['tensorboard'] = TensorboardLogger(
+                trainer_config.trainer.tensorboard_dir,
+                project_name, 
+                experiment_name
+            )
+        
+        if 'rl_logging_board' in default_backend:
+            from verl.utils.rl_logging_board import RLLoggingBoardLogger
+            self.logger['rl_logging_board'] = RLLoggingBoardLogger(
+                trainer_config.trainer.rl_logging_board_dir,
+                project_name, 
+                experiment_name
+            )
 
         if 'console' in default_backend:
             from verl.utils.logger.aggregate_logger import LocalLogger
             self.console_logger = LocalLogger(print_to_console=True)
             self.logger['console'] = self.console_logger
 
-    def log(self, data, step, backend=None):
+    def log(self, data, step, batch=None, backend=None, tokenizer=None):
         for default_backend, logger_instance in self.logger.items():
             if backend is None or default_backend in backend:
-                logger_instance.log(data=data, step=step)
+                if default_backend == 'rl_logging_board':
+                    if batch is not None:
+                        logger_instance.log(data=data, step=step, batch=batch, tokenizer=tokenizer)
+                else:
+                    logger_instance.log(data=data, step=step)
 
     def __del__(self):
         if 'wandb' in self.logger:
@@ -113,8 +138,6 @@ class Tracking(object):
             self.logger['swanlab'].finish()
         if 'vemlp_wandb' in self.logger:
             self.logger['vemlp_wandb'].finish(exit_code=0)
-        if 'tensorboard' in self.logger:
-            self.logger['tensorboard'].finish()
 
 
 class _TensorboardAdapter:

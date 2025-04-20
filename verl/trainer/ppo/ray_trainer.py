@@ -809,10 +809,9 @@ class RayPPOTrainer(object):
         from verl.utils.tracking import Tracking
         from omegaconf import OmegaConf
 
-        logger = Tracking(project_name=self.config.trainer.project_name,
-                          experiment_name=self.config.trainer.experiment_name,
-                          default_backend=self.config.trainer.logger,
-                          config=OmegaConf.to_container(self.config, resolve=True))
+        logger = Tracking(
+            trainer_config=self.config,
+            config=OmegaConf.to_container(self.config, resolve=True)        )
 
         self.global_steps = 0
 
@@ -1003,7 +1002,7 @@ class RayPPOTrainer(object):
                     metrics.update(compute_agent_metrics(batch=batch))
 
                 # TODO: make a canonical logger that supports various backend
-                logger.log(data=metrics, step=self.global_steps)
+                logger.log(data=metrics, step=self.global_steps, batch=batch, tokenizer=self.tokenizer)
 
                 if is_last_step:
                     pprint(f'Final validation metrics: {last_val_metrics}')
