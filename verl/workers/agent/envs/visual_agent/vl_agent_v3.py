@@ -118,7 +118,7 @@ class VLAgentEnvV3(ToolBase):
 
 
 if __name__ == '__main__':
-    tool = VLAgentEnvV2(_name=None, _desc=None, _params=None)
+    tool = VLAgentEnvV3(_name=None, _desc=None, _params=None)
     action_text = """<think> The image shows a building with a steeple and some trees in the foreground. There is a person walking in front of the building, but the details of their clothing are not clear enough to determine the color of their jacket. The image does not provide enough detail to answer the question definitively.\n\nSince the image does not provide sufficient detail to determine the color of the woman\'s jacket, I need to use the zoom_in tool to get a closer look at the person.\n</think>\n<tool_call>\n{"name": "zoom_in", "arguments": {"region": "{\\"bbox_2d\\": [587, 1764, 629, 1860]}"}}\n</tool_call>"""
 
     observation, reward, done, info = tool.execute(action_string=action_text)

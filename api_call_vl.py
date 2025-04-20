@@ -12,6 +12,7 @@ import os
 from openai import OpenAI
 from io import BytesIO
 from PIL import Image
+from math import floor, ceil
 
 
 vlm_api_key = "zzw-114514"
@@ -32,6 +33,8 @@ llm_client = OpenAI(
 )
 models = llm_client.models.list()
 llm_model = models.data[0].id
+
+second_turn_trigger = "I need to look carefully at this image. Can you provide the cropped images related to this question?"
 
 
 def get_chat_template():
@@ -108,35 +111,51 @@ Judgement:"""
     return f'{demo_prompt}{test_prompt}'
 
 
-def encode_base64_content_from_local_path(image_path: str) -> str:
+def maybe_resize_bbox(bbox):
+    x1, y1, x2, y2 = bbox
+    width = x2 - x1
+    height = y2 - y1
+    if height < 28 or width < 28:
+        center_x = (x1 + x2) / 2.0
+        center_y = (y1 + y2) / 2.0
+        ratio = 28 / min(height, width)
+        new_half_width = ceil(width * ratio * 0.5)
+        new_half_height = ceil(height * ratio * 0.5)
+        new_x1 = floor(center_x - new_half_width)
+        new_x2 = ceil(center_x + new_half_width)
+        new_y1 = floor(center_y - new_half_height)
+        new_y2 = ceil(center_y + new_half_height)
+        return [new_x1, new_y1, new_x2, new_y2]
+    return [x1, y1, x2, y2]
+
+
+def encode_base64_content_from_local_path(image_path, bbox=None):
     image = Image.open(image_path).convert("RGB")
+    if bbox:
+        bbox[2] += bbox[0]
+        bbox[3] += bbox[1]
+        bbox = maybe_resize_bbox(bbox)
+        image = image.crop(bbox)
     buffered = BytesIO()
     image.save(buffered, format="JPEG")
     img_base64 = base64.b64encode(buffered.getvalue()).decode("utf-8")
     return img_base64
 
 # Single-image input inference
-def run_single_image(prompt, image_path):
+def call_vlm(prompt, image_path, bboxs=None):
     image_path = os.path.join(image_path_prefix, image_path)
     ## Use base64 encoded image in the payload
     image_base64 = encode_base64_content_from_local_path(image_path)
+    convs = [{"role": "user", "content": [{"type": "text", "text": prompt}, {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{image_base64}"}}]},]
+    if bboxs:
+        convs.append({"role": "assistant", "content": second_turn_trigger})
+        content = [{"type": "text", "text": "Sure."}]
+        for bbox in bboxs:
+            image_base64_cropped = encode_base64_content_from_local_path(image_path, bbox=bbox)
+            content.append({"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{image_base64_cropped}"}})
+        convs.append({"role": "user", "content": content})
     chat_completion_from_base64 = vlm_client.chat.completions.create(
-        messages=[{
-            "role":
-            "user",
-            "content": [
-                {
-                    "type": "text",
-                    "text": prompt
-                },
-                {
-                    "type": "image_url",
-                    "image_url": {
-                        "url": f"data:image/jpeg;base64,{image_base64}"
-                    },
-                },
-            ],
-        }],
+        messages=convs,
         model=vlm_model,
         # max_completion_tokens=64,
     )
@@ -170,22 +189,55 @@ def judge_response(prompt):
             acc_reward = 0.0
     return acc_reward == 1.0
 
-def process_prompt(data):
+def process_prompt_1turn(data):
     max_retries = 100
     retry_delay = 3
     
-    prompt = data['question']
+    prompt = data['conversations'][0]['value'].split('<object>.\n')[-1]
+    gt = data['conversations'][1]['value']
     image_path = data['image']
-    gt = data['answer']
-    # target_name = data['target_instances'][0]['name']
-    # bbox = data['target_instances'][0]['bbox']
-    if len(data['target_instances']) > 1:
+    
+    if len(data['target_instances']) == 0:
         return None
     
     save_data = data
     for attempt in range(max_retries):
         try:
-            prediction = run_single_image(prompt, image_path)
+            prediction = call_vlm(prompt, image_path, bboxs=None)
+            save_data['prediction'] = prediction
+            judge_prompt = get_judge_prompt(prompt, prediction, gt)
+            save_data['result'] = judge_response(judge_prompt)
+            save_data['distill_status'] = 'success'
+            return save_data
+        except Exception as e:
+            if attempt < max_retries - 1:
+                print(e)
+                print(f"第{attempt+1}次重试: {prompt[:50]}...")
+                time.sleep(retry_delay)
+                continue
+            save_data['distill_status'] = 'fail'
+            return save_data
+
+def process_prompt_2turn(data):
+    max_retries = 100
+    retry_delay = 3
+    
+    if not data['result']:
+        return None
+    
+    prompt = data['conversations'][0]['value'].split('<object>.\n')[-1]
+    gt = data['conversations'][1]['value']
+    image_path = data['image']
+    
+    if len(data['target_instances']) == 0:
+        return None
+    target_names = [t['name'] for t in data['target_instances']]
+    bboxs = [t['bbox'] for t in data['target_instances']]
+    
+    save_data = data
+    for attempt in range(max_retries):
+        try:
+            prediction = call_vlm(prompt, image_path, bboxs=bboxs)
             save_data['prediction'] = prediction
             judge_prompt = get_judge_prompt(prompt, prediction, gt)
             save_data['result'] = judge_response(judge_prompt)
@@ -203,17 +255,23 @@ def process_prompt(data):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--input', type=str, default="./data/vlagent/seal_vqa_data/GQA_data.json")
-    parser.add_argument('--output', type=str, default="./data/vlagent/distilled/GQA_raw.json")
+    parser.add_argument('--input', type=str, default="./data/vlagent/seal_vqa_data/spatial_relation_data.json")
+    parser.add_argument('--output', type=str, default="./data/vlagent/distilled/spatial_relation_raw.json")
     parser.add_argument('--processes', type=int, default=cpu_count())
+    parser.add_argument('--multi_turn', action='store_true', default=False)
+    parser.add_argument('--jsonl', action='store_true', default=False)
     args = parser.parse_args()
 
     # 读取输入文件
     print(f"正在读取文件: {args.input}")
     with open(args.input, 'r') as f:
-        datas = json.load(f)
-        # datas = [json.loads(line) for line in f]
+        if args.jsonl:
+            datas = [json.loads(line) for line in f]
+        else:
+            datas = json.load(f)
     print(f"成功读取 {len(datas)} 条data")
+    
+    process_prompt = process_prompt_1turn if not args.multi_turn else process_prompt_2turn
 
     # 创建进程池
     with open(args.output, 'a+') as write_f:

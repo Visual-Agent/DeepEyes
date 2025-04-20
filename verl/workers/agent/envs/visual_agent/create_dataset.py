@@ -1,133 +1,106 @@
-# Copyright 2024 Bytedance Ltd. and/or its affiliates
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-"""
-Preprocess the Geometry3k dataset to parquet format
-"""
-
+import re
 import os
 import datasets
-import pandas as pd
+from tqdm import tqdm
 import json
-from PIL import Image
+import re
+import time
 import io
-from io import BytesIO
-
-from verl.utils.hdfs_io import copy, makedirs
+import json
+import random
 import argparse
+from io import BytesIO
+from PIL import Image
+import base64
+
+
+query_text = """{question} First output the thinking process in <think> </think> tags and then output the final answer in <answer> </answer> tags. Output the final answer in JSON format:
+```json
+[
+    {{"bbox_2d": [x1, y1, x2, y2], "label": "label name"}}
+]
+```
+"""
+
+image_path_prefix = "/cpfs/user/honglingyi/DATA/LLM/Vstar"
+
+
+def make_map_fn(split, data_source, env_name):
+
+    def process_fn(data, idx):
+        
+        # only choose sample that answer correctly with the 2turn setting.
+        if not data.get('result', True):
+            return None
+        
+        question = data['conversations'][0]['value'].split('<object>.\n')[-1]
+        gt = data['conversations'][1]['value']
+        image_path = os.path.join(image_path_prefix, data['image'])
+        
+        with Image.open(image_path) as img:
+            image_format = img.format
+            img_byte_arr = io.BytesIO()
+            img.save(img_byte_arr, format=image_format)
+            img_bytes = img_byte_arr.getvalue()
+        
+        images = [{'bytes': img_bytes, 'path': None}]
+
+        data = {
+            "data_source": data_source,
+            "env_name": env_name,
+            "prompt": [
+            {
+                "role": "user",
+                "content": query_text.format(question=question)
+            }],
+            'images': images,
+            "ability": "vl",
+            "reward_model": {
+                "style": "model",
+                "ground_truth": gt
+            },
+            "extra_info": {
+                'split': split,
+                'id': idx,
+                'question': question                
+            }
+        }
+        return data
+
+    return process_fn
+
+
+def construct_rl_prompt(args):
+    dataset = datasets.load_dataset('json', data_files=args.local_jsonl_path, split='train')
+    total_size = len(dataset)
+    proposed_val_size = min(args.val_size, int(total_size * args.val_ratio))
+    assert total_size > proposed_val_size
+
+    split_dataset = dataset.train_test_split(test_size=proposed_val_size, seed=42, shuffle=True)
+    train_dataset = split_dataset['train']
+    val_dataset = split_dataset['test']
+
+    train_dataset = train_dataset.map(function=make_map_fn('train', args.data_source, args.env_name),
+                                remove_columns=val_dataset.column_names,
+                                with_indices=True)
+    train_dataset.to_parquet(os.path.join(args.output_dir, f'train_{args.note}.parquet'))
+    
+    val_dataset = val_dataset.map(function=make_map_fn('test', args.data_source, args.env_name),
+                              remove_columns=val_dataset.column_names,
+                              with_indices=True)
+    val_dataset.to_parquet(os.path.join(args.output_dir, f'val_{args.note}.parquet'))
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--local_dir', default='/cpfs/user/honglingyi/DATA/LLM/MMEureka')
-    parser.add_argument('--hdfs_dir', default=None)
+    parser.add_argument('--local_jsonl_path', default='./data/vlagent/distilled/GQA_1t_fail.json')
+    parser.add_argument('--output_dir', default='./data/vlagent/parquet')
+    parser.add_argument('--note', default='GQA_1t_fail')
+    parser.add_argument('--val_size', default=1000)
+    parser.add_argument('--val_ratio', default=0.1)
+    parser.add_argument('--data_source', default='vl_agent')
+    parser.add_argument('--env_name', default='vl_agent_v3')
 
     args = parser.parse_args()
 
-    data_source = 'MM-Eureka'
-    data_path = '/cpfs/user/honglingyi/DATA/LLM/MMEureka'
-
-
-    instruction_following = (
-        r'You FIRST think about the reasoning process as an internal monologue and then provide the final answer. '
-        r'The reasoning process MUST BE enclosed within <think> </think> tags. The final answer MUST BE put in \boxed{}.'
-    )
-
-    # dataset = datasets.load_dataset('json', os.path.join(data_path, 'dataset.jsonl'))
-
-    jsonl_path = os.path.join(data_path, 'dataset.jsonl')
-    jsonl_data = []
-    with open(jsonl_path, 'r', encoding='utf-8') as f:
-        for line in f:
-            jsonl_data.append(json.loads(line))
-    
-    field_names = jsonl_data[0].keys()
-
-    data_dict = {field: [] for field in field_names}
-    for item in jsonl_data:
-        for field in field_names:
-            data_dict[field].append(item[field])
-        
-    raw_dataset = datasets.Dataset.from_dict(data_dict)
-
-    instruction_prompt_system = 'A conversation between User and Assistant. The user asks a question, and the Assistant solves it. The assistant first thinks about the reasoning process in the mind and then provides the user with the answer. The reasoning process and answer are enclosed within <think></think>and <answer></answer>tags, respectively, i.e., <think>reasoning process here </think><answer>answer here </answer>.'
-    instruction_prompt_before = r'You must put your answer inside <answer> </answer> tags, i.e., <answer> answer here </answer>. And your final answer will be extracted automatically by the \boxed{} tag. Please reason step by step.'
-
-    # add a row to each data item that represents a unique id
-    def make_map_fn(split):
-
-        def process_fn(example, idx):
-            # print (example)
-            
-            prompt = example.pop('conversations')[-1]['content']
-            problem = prompt.split('\nQuestion:\n')[-1]
-            _ = prompt.split('\nQuestion:\n')[0]
-            ori_prompt = _.split('<image>\n')[-1]
-            prompt = '<image>\n' + instruction_prompt_before + '\nQuestion:\n' + problem
-            answer = example.pop('answer')
-            image_urls = example.pop('image_urls')
-            images = []
-            target_size = (224, 224)
-            for image_url in image_urls:
-                image_path = os.path.join(data_path, image_url)
-                # with open(image_path, 'rb') as img_file:
-                #     img_bytes = img_file.read()
-                with Image.open(image_path) as img:
-                    image_format = img.format
-                    img_byte_arr = io.BytesIO()
-                    # 将图片保存到字节流中
-                    img.save(img_byte_arr, format=image_format)
-                    # 获取字节流的内容
-                    img_byte_arr = img_byte_arr.getvalue()
-                    img_bytes = img_byte_arr
-                images.append({'bytes': img_bytes, 'path': None})
-            
-
-            data = {
-                "data_source": data_source,
-                "prompt": [
-                    {
-                        "role": "system",
-                        "content": instruction_prompt_system,
-                    },
-                    {
-                        "role": "user",
-                        "content": prompt,
-                    },
-                ],
-                "images": images,
-                "ability": "general",
-                "reward_model": {
-                    "style": "rule",
-                    "ground_truth": answer
-                },
-                "extra_info": {
-                    'split': split,
-                    'index': idx,
-                    'answer': answer,
-                    "question": problem,
-                }
-            }
-            return data
-
-        return process_fn
-
-    dataset = raw_dataset.map(function=make_map_fn('train'), with_indices=True, num_proc=8)
-
-    local_dir = args.local_dir
-    hdfs_dir = args.hdfs_dir
-
-    dataset.to_parquet(os.path.join(local_dir, 'train_instruct.parquet'))
-
-    if hdfs_dir is not None:
-        makedirs(hdfs_dir)
-        copy(src=local_dir, dst=hdfs_dir)
+    construct_rl_prompt(args)
