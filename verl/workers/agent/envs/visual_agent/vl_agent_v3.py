@@ -16,7 +16,7 @@ from verl.workers.agent.tool_envs import ToolBase, extract_tool_call_contents
 class VLAgentEnvV3(ToolBase):
     name = "vl_agent_v3"
     
-    user_prompt = "Here is the zoomed in image for your grounding region {}\n<image>"
+    user_prompt = "<image>\nHere is the zoomed in image for your grounding region {}.\nIf the images provided above are sufficient to answer the user's question, please put your final answer within <answer></answer>. Otherwise generate a new grouding in JSON format, and the zoomed-in image of your grounding will be provided in next turn."
     answer_start = '<answer>'
     answer_end = '</answer>'
 
@@ -57,6 +57,7 @@ class VLAgentEnvV3(ToolBase):
         obs_dict = {"chat": chat_msg, "multi_modal_data": {"image": [cropped_image]}}
         return obs_dict, 0.0, False, {}
 
+
     def reset(self, raw_prompt, multi_modal_data, origin_multi_modal_data, **kwargs):
         self.chatml_history = raw_prompt
         self.multi_modal_data = origin_multi_modal_data
@@ -72,7 +73,7 @@ class VLAgentEnvV3(ToolBase):
             if not action:
                 continue
             try:
-                bbox_info = json.loads(action)
+                bbox_info = eval(action)
                 if isinstance(bbox_info, list):
                     bbox_2d = bbox_info[0]['bbox_2d']
                 else:
@@ -113,7 +114,7 @@ class VLAgentEnvV3(ToolBase):
             new_right = ceil(center_x + new_half_width)
             new_top = floor(center_y - new_half_height)
             new_bottom = ceil(center_y + new_half_height)
-            return [new_left, new_right, new_top, new_bottom]
+            return [new_left, new_top, new_right, new_bottom]
         return [left, top, right, bottom]
 
 
