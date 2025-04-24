@@ -8,7 +8,7 @@ from verl import DataProto
 from verl.models.transformers.qwen2_vl import get_rope_index
 from verl.utils.model import compute_position_id_with_mask
 from verl.utils import hf_tokenizer, hf_processor
-from verl.utils.dataset.rl_dataset import process_image
+from verl.utils.dataset.vision_utils import process_image, process_raw_image, process_video
 from verl.utils.torch_functional import pad_2d_list_to_length
 from verl.workers.agent.tool_envs import ToolBase
 
@@ -69,24 +69,32 @@ def _preprocess_multi_modal_inputs(prompt_str, processor, **kwargs):
     vllm_input_prompt = prompt_str.replace('<image>', '<|vision_start|><|image_pad|><|vision_end|>')
     input_mm_data = kwargs.get("multi_modal_data", {"image": []})
     input_mm_data["image"] = [process_image(image) for image in input_mm_data['image']]
-    image_inputs = processor.image_processor(input_mm_data["image"], return_tensors='pt')
-    image_grid_thw = image_inputs['image_grid_thw']
-    mm_inputs = {key: val for key, val in image_inputs.items()}
-    print(f' [DENIG mm_input] {mm_inputs.keys()=}')
+    model_inputs = processor(text=[vllm_input_prompt], images=input_mm_data["image"], return_tensors="pt")
+    input_ids = model_inputs.pop("input_ids")[0]
+    attention_mask = model_inputs.pop("attention_mask")[0]
 
-    if image_grid_thw is not None:
-        merge_length = processor.image_processor.merge_size**2
-        index = 0
-        while '<image>' in prompt_str:
-            prompt_str = prompt_str.replace(
-                '<image>',
-                '<|vision_start|>' + '<|placeholder|>' * (image_grid_thw[index].prod() // merge_length) +
-                '<|vision_end|>',
-                1,
-            )
-            index += 1
-        prompt_str = prompt_str.replace('<|placeholder|>', processor.image_token)
-    return vllm_input_prompt, prompt_str, mm_inputs
+    if "second_per_grid_ts" in model_inputs:
+        model_inputs.pop("second_per_grid_ts")
+
+    mm_inputs = dict(model_inputs)
+    print(f' [DEBUG mm_inputs] {mm_inputs.keys()=}')
+    # image_inputs = processor.image_processor(input_mm_data["image"], return_tensors='pt')
+    # image_grid_thw = image_inputs['image_grid_thw']
+    # mm_inputs = {key: val for key, val in image_inputs.items()}
+
+    # if image_grid_thw is not None:
+    #     merge_length = processor.image_processor.merge_size**2
+    #     index = 0
+    #     while '<image>' in prompt_str:
+    #         prompt_str = prompt_str.replace(
+    #             '<image>',
+    #             '<|vision_start|>' + '<|placeholder|>' * (image_grid_thw[index].prod() // merge_length) +
+    #             '<|vision_end|>',
+    #             1,
+    #         )
+    #         index += 1
+    #     prompt_str = prompt_str.replace('<|placeholder|>', processor.image_token)
+    return vllm_input_prompt, input_ids, mm_inputs
 
 
 def agent_rollout_loop(config, vllm_engine, vllm_inputs, prompts, multi_modal_inputs, sampling_params):
@@ -177,6 +185,10 @@ def agent_rollout_loop(config, vllm_engine, vllm_inputs, prompts, multi_modal_in
             running_attn_masks[idx] = torch.cat([running_attn_masks[idx], action_mask])
 
             # Ensure the last token is not obs
+            if running_states[idx].shape[-1] >= max_total_length or len(vllm_input_list[idx]['prompt_token_ids']) >= max_total_length:
+                active_mask[idx] = False
+                continue
+
             if done or step == config.agent.max_turns - 1:
                 active_mask[idx] = False
                 continue
@@ -230,7 +242,7 @@ def agent_rollout_loop(config, vllm_engine, vllm_inputs, prompts, multi_modal_in
     running_attn_masks = [mask[: max_total_length] for mask in running_attn_masks]
     attn_mask_tensor = pad_2d_list_to_length(running_attn_masks, 0, max_total_length).to(target_device)
 
-    if processor is not None:
+    if processor is not None and processor.image_processor.__class__.__name__ == "Qwen2VLImageProcessor":
         # For Qwen-VL: (n*bs, 3, seq_len)
         position_ids_list = [
             get_rope_index(
@@ -244,7 +256,7 @@ def agent_rollout_loop(config, vllm_engine, vllm_inputs, prompts, multi_modal_in
         ]
         position_ids_tensor = torch.stack(position_ids_list, dim=0)
     else:
-        # For LM: (bs, seq_len)
+        # For LM: (n*bs, seq_len)
         position_ids_tensor = compute_position_id_with_mask(attn_mask_tensor)
 
     reward_tensor_list = [reward[: max_total_length] for reward in reward_tensor_list]
@@ -310,16 +322,13 @@ def execute_tool_call(sample, tokenizer=None, processor=None, pbar=None):
         chat_list = tool_result.pop("chat", [])
 
         if len(prompt_str) > 0:
-            prompt_str_vllm, prompt_str_model, mm_inputs = _preprocess_multi_modal_inputs(prompt_str, processor, **tool_result)
+            prompt_str_vllm, obs_token_ids_model, mm_inputs = _preprocess_multi_modal_inputs(prompt_str, processor, **tool_result)
             obs_token_ids_vllm = tokenizer.encode(prompt_str_vllm, add_special_tokens=False, return_tensors='pt')[0]
-            obs_token_ids_model = tokenizer.encode(prompt_str_model, add_special_tokens=False, return_tensors='pt')[0]
-            breakpoint()
 
         elif len(chat_list) > 0:
             obs_str = tokenizer.apply_chat_template(chat_list, add_generation_prompt=True, tokenize=False)
-            obs_str_vllm, obs_str_model, mm_inputs = _preprocess_multi_modal_inputs(obs_str, processor, **tool_result)
+            obs_str_vllm, obs_token_ids_model, mm_inputs = _preprocess_multi_modal_inputs(obs_str, processor, **tool_result)
             obs_token_ids_vllm = tokenizer.encode(obs_str_vllm, add_special_tokens=False, return_tensors='pt')[0]
-            obs_token_ids_model = tokenizer.encode(obs_str_model, add_special_tokens=False, return_tensors='pt')[0]
 
             # NOTE: skip the sp (and the \n token that comes after it) added by Qwen tokenizer
             eos_start_idx = torch.nonzero(obs_token_ids_vllm == tokenizer.eos_token_id)
@@ -353,8 +362,7 @@ def execute_tool_call(sample, tokenizer=None, processor=None, pbar=None):
 
 class ParallelEnv:
     """
-    The interface intentionally designed to be the similar to : https://github.com/openai/gym
-    Hope this could be easier to use for RLers.
+    The interface is designed to be the similar to : https://github.com/openai/gym
     """
     def __init__(self, env_config, tokenizer, processor, **kwargs):
         self.config = env_config

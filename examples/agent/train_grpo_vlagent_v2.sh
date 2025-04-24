@@ -4,7 +4,7 @@ set -x
 DATA_DIR=/cpfs/user/honglingyi/DATA/LLM/VL_Agent/parquets
 
 PROJECT_NAME="agent_vlagent"
-EXPERIMENT_NAME="visual_agent_env_v2_model_v1"
+EXPERIMENT_NAME="visual_agent_env_v2_model_v3"
 
 export SAVE_CHECKPOINT_DIR=/diancpfs/user/fengyuan/verl_checkpoints
 # export VLLM_ATTENTION_BACKEND=XFORMERS # vllm + qwen2-7b with flash_attn has some issues
@@ -14,7 +14,7 @@ VISUAL_DATASET_TEST=/cpfs/user/honglingyi/DATA/LLM/VL_Agent/parquets/vl_agent_V1
 
 # data.train_files=${DATA_DIR}/vl_agent_V1.parquet \
 
-REF_MODEL_PATH=/cpfs/user/honglingyi/MODEL/Qwen/Qwen2.5-VL-7B-Instruct
+REF_MODEL_PATH=/cpfs/user/honglingyi/MODEL/Qwen/Qwen2.5-VL-32B-Instruct
 PYTHONUNBUFFERED=1 python3 -m verl.trainer.main_ppo \
     data.train_files=${VISUAL_DATASET_TRAIN} \
     data.val_files=${VISUAL_DATASET_TEST} \
