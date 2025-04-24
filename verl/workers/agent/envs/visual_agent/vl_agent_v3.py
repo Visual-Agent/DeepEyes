@@ -36,7 +36,7 @@ Otherwise, please put your final answer in <answer> </answer> tags.
         self.chatml_history = []
         self.multi_modal_data = None
         super().__init__(name=self.name)
-    
+
     def execute(self, action_string, **kwargs):
         answers = extract_tool_call_contents(self.answer_start, self.answer_end, action_string)
         if answers:
@@ -76,6 +76,9 @@ Otherwise, please put your final answer in <answer> </answer> tags.
         self.multi_modal_data = origin_multi_modal_data
         assert 'image' in self.multi_modal_data.keys(), f'[ERROR] {origin_multi_modal_data=}'
         assert len(self.multi_modal_data['image']) > 0, f'[ERROR] {self.multi_modal_data["image"]=}'
+        
+        self.height = self.multi_modal_data['image'][0].height
+        self.width = self.multi_modal_data['image'][0].width
 
 
     def get_bbox_2d(self, action_list):
@@ -95,8 +98,11 @@ Otherwise, please put your final answer in <answer> </answer> tags.
                         bbox_list.append(self.maybe_resize_bbox(*bbox_2d))
                 else:
                     bbox_2d = bbox_info['bbox_2d']
-                    self.check_single_bbox(bbox_2d)
-                    bbox_list.append(self.maybe_resize_bbox(*bbox_2d))
+                assert isinstance(bbox_2d, list), f"[ERROR] invalid bbox_2d type: {bbox_2d=}"
+                assert len(bbox_2d) == 4, f"[ERROR] invalid size for {bbox_2d=}"
+                if not self.validate_bbox(*bbox_2d):
+                    print(f' [ERROR] bbox={bbox_2d} is invalid')
+                return self.maybe_resize_bbox(*bbox_2d)
             except Exception as err:
                 print(f' [ERROR] unexpected {err=}, {action=}')
                 continue
@@ -115,7 +121,7 @@ Otherwise, please put your final answer in <answer> </answer> tags.
             assert left < right and bottom > top, f'invalid shape for {left=}, {top=}, {right=}, {bottom=}'
             height = bottom - top
             width = right - left
-            assert max(height, width) / min(height, width) <= 200, f"aspect ratio error: {left=}, {top=}, {right=}, {bottom=}"
+            assert max(height, width) / min(height, width) <= 100, f"aspect ratio error: {left=}, {top=}, {right=}, {bottom=}"
             return True
         except Exception as err:
             print(f' [ERROR vl_agent #2] {err=}')
@@ -123,6 +129,13 @@ Otherwise, please put your final answer in <answer> </answer> tags.
 
 
     def maybe_resize_bbox(self, left, top, right, bottom):
+        left = max(0, left)
+        top = max(0, top)
+        right = min(self.width, right)
+        bottom = min(self.height, bottom)
+        if not self.validate_bbox(left, top, right, bottom):
+            return None
+
         height = bottom - top
         width = right - left
         if height < 28 or width < 28:
@@ -135,6 +148,8 @@ Otherwise, please put your final answer in <answer> </answer> tags.
             new_right = ceil(center_x + new_half_width)
             new_top = floor(center_y - new_half_height)
             new_bottom = ceil(center_y + new_half_height)
+            if not self.validate_bbox(new_left, new_top, new_right, new_bottom):
+                return None
             return [new_left, new_top, new_right, new_bottom]
         return [left, top, right, bottom]
 

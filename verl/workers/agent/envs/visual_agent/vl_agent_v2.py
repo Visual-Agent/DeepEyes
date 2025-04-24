@@ -71,44 +71,51 @@ class VLAgentEnvV2(ToolBase):
         self.multi_modal_data = origin_multi_modal_data
         assert 'image' in self.multi_modal_data.keys(), f'[ERROR] {origin_multi_modal_data=}'
         assert len(self.multi_modal_data['image']) > 0, f'[ERROR] {self.multi_modal_data["image"]=}'
+        self.height = self.multi_modal_data['image'][0].height
+        self.width = self.multi_modal_data['image'][0].width
 
 
     def get_bbox_2d(self, action_list):
         if not action_list:
             return None
 
-        action_string = action_list[0]
-        try:
-            action_object = eval(action_string)
-            arguments = action_object['arguments']
-            if isinstance(arguments, str):
-                arguments = eval(arguments)
-            if isinstance(arguments, list):
-                arguments = arguments[0]
+        for action_string in action_list:
+            if not action_string:
+                continue
+            try:
+                action_object = eval(action_string)
+                arguments = action_object['arguments']
+                if isinstance(arguments, str):
+                    arguments = eval(arguments)
+                if isinstance(arguments, list):
+                    arguments = arguments[0]
 
-            if 'region' in arguments:
-                region = arguments['region']
-            else:
-                region = arguments
+                if 'region' in arguments:
+                    region = arguments['region']
+                else:
+                    region = arguments
 
-            if isinstance(region, str):
-                region = eval(region)
+                if isinstance(region, str):
+                    region = eval(region)
 
-            if isinstance(region, dict):
-                bbox = region['bbox_2d']
-            elif isinstance(region, list):
-                bbox = region
-            else:
-                raise ValueError(f'invalid type for {region=} for model')
+                if isinstance(region, dict):
+                    bbox = region['bbox_2d']
+                elif isinstance(region, list):
+                    bbox = region
+                else:
+                    continue
 
-            if isinstance(bbox, str):
-                bbox = eval(bbox)
-            if not self.validate_bbox(*bbox):
-                return None
-            return self.maybe_resize_bbox(*bbox)
-        except Exception as err:
-            print(f' [ERROR vl_agent #1] {err=}')
-            return None
+                if isinstance(bbox, str):
+                    bbox = eval(bbox)
+                assert isinstance(bbox, list), f"[ERROR] invalid bbox_2d type: {bbox=}"
+                assert len(bbox) == 4, f"[ERROR] invalid size for {bbox=}"
+                bbox_result = self.maybe_resize_bbox(*bbox)
+                if not bbox_result:
+                    continue
+            except Exception as err:
+                print(f' [ERROR vl_agent #1] {err=}')
+                continue
+        return None
             
 
     def validate_bbox(self, left, top, right, bottom):
@@ -116,7 +123,7 @@ class VLAgentEnvV2(ToolBase):
             assert left < right and bottom > top, f'invalid shape for {left=}, {top=}, {right=}, {bottom=}'
             height = bottom - top
             width = right - left
-            assert max(height, width) / min(height, width) <= 200, f"aspect ratio error: {left=}, {top=}, {right=}, {bottom=}"
+            assert max(height, width) / min(height, width) <= 100, f"aspect ratio error: {left=}, {top=}, {right=}, {bottom=}"
             return True
         except Exception as err:
             print(f' [ERROR vl_agent #2] {err=}')
@@ -124,6 +131,13 @@ class VLAgentEnvV2(ToolBase):
 
 
     def maybe_resize_bbox(self, left, top, right, bottom):
+        left = max(0, left)
+        top = max(0, top)
+        right = min(self.width, right)
+        bottom = min(self.height, bottom)
+        if not self.validate_bbox(left, top, right, bottom):
+            return None
+
         height = bottom - top
         width = right - left
         if height < 28 or width < 28:
@@ -136,7 +150,9 @@ class VLAgentEnvV2(ToolBase):
             new_right = ceil(center_x + new_half_width)
             new_top = floor(center_y - new_half_height)
             new_bottom = ceil(center_y + new_half_height)
-            return [new_left, new_right, new_top, new_bottom]
+            if not self.validate_bbox(new_left, new_top, new_right, new_bottom):
+                return None
+            return [new_left, new_top, new_right, new_bottom]
         return [left, top, right, bottom]
 
 
