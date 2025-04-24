@@ -16,10 +16,20 @@ from verl.workers.agent.tool_envs import ToolBase, extract_tool_call_contents
 class VLAgentEnvV3(ToolBase):
     name = "vl_agent_v3"
     
-    user_prompt = "<image>\nHere is the zoomed in image for your grounding region {}.\nIf the images provided above are sufficient to answer the user's question, please put your final answer in <answer> </answer> tags. Otherwise generate a new grouding in JSON format, and the zoomed-in image of your grounding will be provided in next turn."
+    # user_prompt = "<image>\nHere is the zoomed in image for your grounding region {}.\nIf the images provided above are sufficient to answer the user's question, please put your final answer in <answer> </answer> tags. Otherwise generate a new grouding in JSON format, and the zoomed-in image of your grounding will be provided in next turn."
+    user_prompt = """\nIf the images provided above are not sufficient to answer the user's question, please generate grouding results in JSON format:
+```json
+[
+    {"bbox_2d": [x1, y1, x2, y2], "label": "label name"}
+]
+```
+The zoomed-in images of your grounding results will be provided in next turn.
+
+Otherwise, please put your final answer in <answer> </answer> tags.
+"""
     answer_start = '<answer>'
     answer_end = '</answer>'
-
+    
     # <tool_call>\n{"name": "zoom_in", "arguments": {"object": "woman\'s jacket"}}\n</tool_call>
     
     def __init__(self, _name, _desc, _params, **kwargs):
@@ -35,26 +45,29 @@ class VLAgentEnvV3(ToolBase):
 
         pattern = re.compile(r'```json\s*([\s\S]*?)```', re.DOTALL)
         action_list = pattern.findall(action_string)
-        action_list = [item for action in action_list for item in eval(action.strip())]
+        action_list = [action.strip() for action in action_list]
         if not action_list:
             return '', 0.0, True, {}
 
-        cropped_bbox = self.get_bbox_2d(action_list)
-        if not cropped_bbox:
+        cropped_bbox_list = self.get_bbox_2d(action_list)
+        if not cropped_bbox_list:
             user_msg = [{"role": "user", "content": "ZOOM IN ARGUMENTS ARE INVALID"}]
             return user_msg, 0.0, False, {}
 
         # TODO: modify here and process the final output
         try:
             pil_img = self.multi_modal_data['image'][0]
-            cropped_image = pil_img.crop(cropped_bbox)
+            cropped_image_list = [pil_img.crop(bbox) for bbox in cropped_bbox_list]
         except Exception as err:
             user_msg = [{"role": "user", "content": "ZOOM IN AREA IS INVALID"}]
             return user_msg, 0.0, False, {}
 
-        user_msg = self.user_prompt.format(cropped_bbox)
+        if len(cropped_image_list) > 3:
+            cropped_image_list = cropped_image_list[:3]
+        
+        user_msg = '<image>' * len(cropped_image_list) + self.user_prompt
         chat_msg = [{"role": "user", "content": user_msg}]
-        obs_dict = {"chat": chat_msg, "multi_modal_data": {"image": [cropped_image]}}
+        obs_dict = {"chat": chat_msg, "multi_modal_data": {"image": cropped_image_list}}
         return obs_dict, 0.0, False, {}
 
 
@@ -68,27 +81,35 @@ class VLAgentEnvV3(ToolBase):
     def get_bbox_2d(self, action_list):
         if not action_list:
             return None
-
+        
+        bbox_list = []
         for action in action_list:
             if not action:
                 continue
             try:
                 bbox_info = eval(action)
                 if isinstance(bbox_info, list):
-                    bbox_2d = bbox_info[0]['bbox_2d']
+                    for bbox in bbox_info:
+                        bbox_2d = bbox['bbox_2d']
+                        self.check_single_bbox(bbox_2d)
+                        bbox_list.append(self.maybe_resize_bbox(*bbox_2d))
                 else:
                     bbox_2d = bbox_info['bbox_2d']
-                assert isinstance(bbox_2d, list), f"[ERROR] invalid bbox_2d type: {bbox_2d=}"
-                assert len(bbox_2d) == 4, f"[ERROR] invalid size for {bbox_2d=}"
-                if not self.validate_bbox(*bbox_2d):
-                    print(f' [ERROR] bbox={bbox_2d} is invalid')
-                return self.maybe_resize_bbox(*bbox_2d)
+                    self.check_single_bbox(bbox_2d)
+                    bbox_list.append(self.maybe_resize_bbox(*bbox_2d))
             except Exception as err:
-                print(f' [ERROR] unexpected {err=}')
+                print(f' [ERROR] unexpected {err=}, {action=}')
                 continue
-        return None
+        
+        return bbox_list
 
 
+    def check_single_bbox(self, bbox_2d):
+        assert isinstance(bbox_2d, list), f"[ERROR] invalid bbox_2d type: {bbox_2d=}"
+        assert len(bbox_2d) == 4, f"[ERROR] invalid size for {bbox_2d=}"
+        assert self.validate_bbox(*bbox_2d)
+    
+    
     def validate_bbox(self, left, top, right, bottom):
         try:
             assert left < right and bottom > top, f'invalid shape for {left=}, {top=}, {right=}, {bottom=}'

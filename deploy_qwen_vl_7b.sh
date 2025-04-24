@@ -14,7 +14,7 @@ python -m vllm.entrypoints.openai.api_server \
   --served-model-name=$SERVED_MODEL_NAME \
   --api-key=$API_KEY \
   --trust-remote-code \
-  --max-model-len 8192 \
+  --max-model-len 32768 \
   --tensor-parallel-size=1 \
   --allowed-local-media-path /cpfs \
   --limit-mm-per-prompt image=10 \

@@ -322,7 +322,7 @@ class vLLMRollout(BaseRollout):
             tool_name_key = self.config.agent.tool_name_key
             if tool_name_key and tool_name_key in non_tensor_batch.keys():
                 non_tensor_batch.pop(tool_name_key)
-            print(f' [DEBUG agent output proto] {batch.keys()=}, {non_tensor_batch.keys()=}')
+            # print(f' [DEBUG agent output proto] {batch.keys()=}, {non_tensor_batch.keys()=}')
 
         # free vllm cache engine
         if vllm_version in ('0.3.1', '0.4.2', '0.5.4', '0.6.3') and self.config.free_cache_engine:

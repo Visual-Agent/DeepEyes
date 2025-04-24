@@ -13,10 +13,11 @@ from openai import OpenAI
 from io import BytesIO
 from PIL import Image
 from math import floor, ceil
+import re
 
 
 vlm_api_key = "zzw-114514"
-vlm_api_base = "http://10.39.17.198:8000/v1"
+vlm_api_base = "http://10.39.4.177:8000/v1"
 vlm_client = OpenAI(
     api_key=vlm_api_key,
     base_url=vlm_api_base
@@ -34,7 +35,40 @@ llm_client = OpenAI(
 models = llm_client.models.list()
 llm_model = models.data[0].id
 
-second_turn_trigger = "I need to look carefully at this image. Can you provide the cropped images related to this question?"
+# second_turn_trigger = "I need to look carefully at this image. Can you provide the cropped images related to this question?"
+
+
+query_text = """Question: {question}
+If the images provided above are not sufficient to answer the user's question, please generate grouding results in JSON format:
+```json
+[
+    {{"bbox_2d": [x1, y1, x2, y2], "label": "label name"}}
+]
+```
+The zoomed-in images of your grounding results will be provided in next turn.
+
+Otherwise, please put your final answer in <answer> </answer> tags.
+"""
+
+query_text_second_turn = """If the images provided above are not sufficient to answer the user's question, please generate grouding results in JSON format:
+```json
+[
+    {"bbox_2d": [x1, y1, x2, y2], "label": "label name"}
+]
+```
+The zoomed-in images of your grounding results will be provided in next turn.
+
+Otherwise, please put your final answer in <answer> </answer> tags.
+"""
+
+json_template = "```json\n{}\n```"
+
+
+def extract_tool_call_contents(start_token, end_token, text):
+    # pattern = r"<tool_call>(.*?)</tool_call>"
+    pattern = re.escape(start_token) + r'(.*?)' + re.escape(end_token)
+    matches = re.findall(pattern, text, re.DOTALL)
+    return matches
 
 
 def get_chat_template():
@@ -112,7 +146,8 @@ Judgement:"""
 
 
 def maybe_resize_bbox(bbox):
-    x1, y1, x2, y2 = bbox
+    x1, y1, dx, dy = bbox
+    x2, y2 = x1 + dx, y1 + dy
     width = x2 - x1
     height = y2 - y1
     if height < 28 or width < 28:
@@ -132,28 +167,34 @@ def maybe_resize_bbox(bbox):
 def encode_base64_content_from_local_path(image_path, bbox=None):
     image = Image.open(image_path).convert("RGB")
     if bbox:
-        bbox[2] += bbox[0]
-        bbox[3] += bbox[1]
-        bbox = maybe_resize_bbox(bbox)
-        image = image.crop(bbox)
+        true_bbox = maybe_resize_bbox(bbox)
+        image = image.crop(true_bbox)
     buffered = BytesIO()
     image.save(buffered, format="JPEG")
     img_base64 = base64.b64encode(buffered.getvalue()).decode("utf-8")
     return img_base64
 
 # Single-image input inference
-def call_vlm(prompt, image_path, bboxs=None):
+def call_vlm(prompt, image_path, bboxs=None, labels=None):
     image_path = os.path.join(image_path_prefix, image_path)
     ## Use base64 encoded image in the payload
     image_base64 = encode_base64_content_from_local_path(image_path)
-    convs = [{"role": "user", "content": [{"type": "text", "text": prompt}, {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{image_base64}"}}]},]
     if bboxs:
+        convs = [{"role": "user", "content": [{"type": "text", "text": query_text.format(question=prompt)}, {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{image_base64}"}}]},]
+        bbox_list = []
+        for bbox, label in zip(bboxs, labels):
+            true_bbox = maybe_resize_bbox(bbox)
+            bbox_list.append({"bbox_2d": true_bbox, "label": label})
+        second_turn_trigger = json_template.format(json.dumps(bbox_list))
         convs.append({"role": "assistant", "content": second_turn_trigger})
-        content = [{"type": "text", "text": "Sure."}]
+        # content = [{"type": "text", "text": "Sure."}]
+        content = [{"type": "text", "text": query_text_second_turn}]
         for bbox in bboxs:
             image_base64_cropped = encode_base64_content_from_local_path(image_path, bbox=bbox)
             content.append({"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{image_base64_cropped}"}})
         convs.append({"role": "user", "content": content})
+    else:
+        convs = [{"role": "user", "content": [{"type": "text", "text": prompt}, {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{image_base64}"}}]},]
     chat_completion_from_base64 = vlm_client.chat.completions.create(
         messages=convs,
         model=vlm_model,
@@ -222,7 +263,7 @@ def process_prompt_2turn(data):
     max_retries = 100
     retry_delay = 3
     
-    if not data['result']:
+    if data['result']:
         return None
     
     prompt = data['conversations'][0]['value'].split('<object>.\n')[-1]
@@ -237,10 +278,16 @@ def process_prompt_2turn(data):
     save_data = data
     for attempt in range(max_retries):
         try:
-            prediction = call_vlm(prompt, image_path, bboxs=bboxs)
+            prediction = call_vlm(prompt, image_path, bboxs=bboxs, labels=target_names)
             save_data['prediction'] = prediction
-            judge_prompt = get_judge_prompt(prompt, prediction, gt)
-            save_data['result'] = judge_response(judge_prompt)
+            valid_pred = extract_tool_call_contents('<answer>', '</answer>', prediction)
+            if valid_pred:
+                save_data['valid_pred'] = valid_pred[0]
+                judge_prompt = get_judge_prompt(prompt, prediction, gt)
+                save_data['result'] = judge_response(judge_prompt)
+            else:
+                save_data['valid_pred'] = ''
+                save_data['result'] = False
             save_data['distill_status'] = 'success'
             return save_data
         except Exception as e:
@@ -255,11 +302,11 @@ def process_prompt_2turn(data):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--input', type=str, default="./data/vlagent/seal_vqa_data/spatial_relation_data.json")
-    parser.add_argument('--output', type=str, default="./data/vlagent/distilled/spatial_relation_raw.json")
+    parser.add_argument('--input', type=str, default="./data/vlagent/distilled/GQA_raw.json")
+    parser.add_argument('--output', type=str, default="./data/vlagent/distilled/GQA_1t_fail_v2.json")
     parser.add_argument('--processes', type=int, default=cpu_count())
-    parser.add_argument('--multi_turn', action='store_true', default=False)
-    parser.add_argument('--jsonl', action='store_true', default=False)
+    parser.add_argument('--multi_turn', action='store_true', default=True)
+    parser.add_argument('--jsonl', action='store_true', default=True)
     args = parser.parse_args()
 
     # 读取输入文件
