@@ -167,9 +167,9 @@ class RLHFDataset(Dataset):
         row_dict: dict = self.dataframe[item]
 
         chat = row_dict.pop(self.prompt_key)
-
+        # print(f'[DEBUG]{chat=}')
         prompt_with_chat_template = self.tokenizer.apply_chat_template(chat, add_generation_prompt=True, tokenize=False)
-
+        # print(f'[DEBUG]{prompt_with_chat_template=}')
         is_multi_modal = self.image_key in row_dict and len(row_dict[self.image_key]) > 0
         if is_multi_modal:  # expand image token
             raw_prompt = prompt_with_chat_template.replace('<image>', '<|vision_start|><|image_pad|><|vision_end|>')

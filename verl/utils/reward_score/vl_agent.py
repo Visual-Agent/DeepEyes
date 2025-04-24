@@ -5,8 +5,7 @@ import random
 openai_api_key = "EMPTY"
 
 openai_api_base_list = [
-    "http://10.39.11.28:10000/v1",
-    "http://10.39.11.27:10000/v1",
+    "http://172.30.52.123:8000/v1", # 72b-it
 ]
 
 client_list = []
@@ -107,23 +106,22 @@ Judgement:"""
 
 def compute_score(predict_str: str, ground_truth: str, extra_info=None) -> float:
     is_format_error = False
-    count_think_1 = predict_str.count("<think>")
-    count_think_2 = predict_str.count("</think>")
-    # if count_think_1 != count_think_2:
-    #     is_format_error = True
+    # count_think_1 = predict_str.count("<think>")
+    # count_think_2 = predict_str.count("</think>")
+    # # if count_think_1 != count_think_2:
+    # #     is_format_error = True
 
     count_vision_1 = predict_str.count("<|vision_start|><|image_pad|><|image_pad|>")
     count_vision_2 = predict_str.count("<|image_pad|><|image_pad|><|vision_end|>")
     if count_vision_1 != count_vision_2:
         is_format_error = True
 
-    predict_no_think = predict_str.split('</think>')[-1].strip()
-    count_answer_1 = predict_no_think.count("<answer>")
-    count_answer_2 = predict_no_think.count("</answer>")
+    count_answer_1 = predict_str.count("<answer>")
+    count_answer_2 = predict_str.count("</answer>")
     if count_answer_1 != 1 or count_answer_2 != 1 or count_answer_1 != count_answer_2:
         is_format_error = True
 
-    answer_text = predict_no_think.split("<answer>")[-1].split("</answer>")[0].strip()
+    answer_text = predict_str.split("<answer>")[-1].split("</answer>")[0].strip()
     question_text = extra_info['question']
     full_prompt = get_prompt(answer_text, ground_truth, question_text)
 
@@ -141,6 +139,7 @@ def compute_score(predict_str: str, ground_truth: str, extra_info=None) -> float
         temperature=0.3,
     )
     response = chat_response.choices[0].message.content.strip()
+    # print(response)
     if 'Judgement:' in response:
         response = response.split('Judgement:')[-1].strip()
         if '1' in response:
@@ -161,7 +160,7 @@ def compute_score(predict_str: str, ground_truth: str, extra_info=None) -> float
 
     tool_reward = 1.0 if count_vision_1 > 1 else 0.0
     format_reward = -1.0 if is_format_error else 0.0
-    return 1.0 * acc_reward + 0.5 * format_reward + 0.5 * tool_reward
+    return 1.0 * acc_reward + 0.2 * format_reward + 0.6 * tool_reward
 
 
 if __name__ == '__main__':

@@ -8,13 +8,13 @@ wandb login
 
 
 PROJECT_NAME="agent_vlagent"
-EXPERIMENT_NAME="visual_toolbox_v2_grpo_qwenvl7b_gpu8"
+EXPERIMENT_NAME="visual_toolbox_v4_grpo_qwenvl7b_gpu16"
 
 export SAVE_CHECKPOINT_DIR=/fs-computility/mabasic/yangminghao/project/VeRL-Agent/checkpoints
 # export VLLM_ATTENTION_BACKEND=XFORMERS # vllm + qwen2-7b with flash_attn has some issues
 
-VISUAL_DATASET_TRAIN=/fs-computility/mabasic/yangminghao/data/MinghaoYang/mmreasoning/vl_agent_V1_test_box_CUSTOM_MODIFIED.parquet
-VISUAL_DATASET_TEST=/fs-computility/mabasic/yangminghao/data/MinghaoYang/mmreasoning/vl_agent_V1_test_box_CUSTOM_MODIFIED.parquet
+VISUAL_DATASET_TRAIN=/fs-computility/mabasic/yangminghao/data/MinghaoYang/mmreasoning/vl_agent_V4_train_gqa_6k.parquet
+VISUAL_DATASET_TEST=/fs-computility/mabasic/yangminghao/data/MinghaoYang/mmreasoning/vl_agent_V4_test_box.parquet
 
 # data.train_files=${DATA_DIR}/vl_agent_V1.parquet \
 
@@ -65,7 +65,7 @@ PYTHONUNBUFFERED=1 python3 -m verl.trainer.main_ppo \
     trainer.n_gpus_per_node=8 \
     trainer.nnodes=${MLP_WORKER_NUM} \
     trainer.save_freq=8 \
-    trainer.test_freq=100000 \
+    trainer.test_freq=8 \
     trainer.project_name=${PROJECT_NAME} \
     trainer.experiment_name=${EXPERIMENT_NAME} \
     trainer.default_local_dir=${SAVE_CHECKPOINT_DIR}/${PROJECT_NAME}/${EXPERIMENT_NAME} \

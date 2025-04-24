@@ -115,7 +115,7 @@ class NaiveRewardManager:
             # )
 
             # debug_output_str = json.dumps(debug_output, ensure_ascii=False)
-            # with open('/cpfs/user/fengyuan/code/github/verl/checkpoints/agent_ppo_debug/ppo_rewards_gt7b_v18.jsonl', 'a+') as fout:
+            # with open('/fs-computility/mabasic/yangminghao/project/VeRL-Agent/checkpoints/agent_log/vl_agent.jsonl', 'a+') as fout:
             #     fout.write(debug_output_str + '\n')
 
             if data_source not in already_print_data_sources:

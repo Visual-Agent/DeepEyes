@@ -155,6 +155,7 @@ def agent_rollout_loop(config, vllm_engine, vllm_inputs, prompts, multi_modal_in
             sampling_params=agent_sampling_params,
             use_tqdm=False
         )
+        breakpoint()
         observations, rewards, dones, info = env.step(actions)
 
         for idx, obs, act, rew, done in zip(active_indices, observations, actions, rewards, dones):
@@ -272,7 +273,7 @@ def execute_tool_call(sample, tokenizer=None, processor=None, pbar=None):
         return {}, 0.0, True, {}
 
     tool_result, reward, done, info = tool.execute(action_string)
-
+    breakpoint()
     # post-process
     if not tool_result:
         tool_result_info = {}
@@ -312,6 +313,7 @@ def execute_tool_call(sample, tokenizer=None, processor=None, pbar=None):
             prompt_str_vllm, prompt_str_model, mm_inputs = _preprocess_multi_modal_inputs(prompt_str, processor, **tool_result)
             obs_token_ids_vllm = tokenizer.encode(prompt_str_vllm, add_special_tokens=False, return_tensors='pt')[0]
             obs_token_ids_model = tokenizer.encode(prompt_str_model, add_special_tokens=False, return_tensors='pt')[0]
+            breakpoint()
 
         elif len(chat_list) > 0:
             obs_str = tokenizer.apply_chat_template(chat_list, add_generation_prompt=True, tokenize=False)

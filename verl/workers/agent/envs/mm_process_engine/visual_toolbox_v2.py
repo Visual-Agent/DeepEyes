@@ -9,9 +9,9 @@ import json
 # 临时修复
 # ToolBase.registry = {}
 
-class VisualToolBox(ToolBase):
-    name = "visual_toolbox"
-    user_prompt = "Here is the observation returned after you executed the tool call."
+class VisualToolBoxV2(ToolBase):
+    name = "visual_toolbox_v2"
+    user_prompt = "Here is the processed image returned after you calling the function {}.\nIf the images provided above are sufficient to answer the user's question, please put your final answer within <answer></answer>. Otherwise you can continue to call tools."
 
     def __init__(self, _name, _desc, _params, **kwargs):
         super().__init__(
@@ -93,10 +93,10 @@ class VisualToolBox(ToolBase):
             
             # Prepare the observation
             obs = {
-                "prompt": "<|im_end|>\n<|im_start|>user\n" +"<image>" + self.user_prompt + "<|im_end|>\n<|im_start|>assistant\n",
+                "prompt": "<|im_end|>\n<|im_start|>user\n" + "<tool_response>" +"<image>" + self.user_prompt.format(tool_call) + "</tool_response>" + "<|im_end|>\n<|im_start|>assistant\n",
                 "multi_model_data": {"image": [current_image]}
             }
-            reward = 0.5  # Reward for successful tool call with correct JSON
+            reward = 0.1  # Reward for successful tool call with correct JSON
             done = False
             info = {"status": "success", "tool_used": tool_name}
             print(f'[DEBUG] SUCCESS ACTION {action_string=}')

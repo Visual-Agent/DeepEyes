@@ -8,7 +8,7 @@ wandb login
 
 
 PROJECT_NAME="agent_vlagent"
-EXPERIMENT_NAME="visual_toolbox_v2_grpo_qwenvl7b_gpu8"
+EXPERIMENT_NAME="visual_toolbox_v2_grpo_qwenvl7b_gpu16"
 
 export SAVE_CHECKPOINT_DIR=/fs-computility/mabasic/yangminghao/project/VeRL-Agent/checkpoints
 # export VLLM_ATTENTION_BACKEND=XFORMERS # vllm + qwen2-7b with flash_attn has some issues
@@ -60,7 +60,7 @@ PYTHONUNBUFFERED=1 python3 -m verl.trainer.main_ppo \
     actor_rollout_ref.rollout.agent.concurrent_workers=1 \
     actor_rollout_ref.rollout.agent.show_tqdm=True \
     trainer.critic_warmup=0 \
-    trainer.logger=['console','wandb'] \
+    trainer.logger=['console'] \
     trainer.val_before_train=False \
     trainer.n_gpus_per_node=8 \
     trainer.nnodes=${MLP_WORKER_NUM} \
