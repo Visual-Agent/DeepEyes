@@ -17,7 +17,10 @@ class VLAgentEnvV1(ToolBase):
     # url_query = "http://0.0.0.0:24000/query"
     query_urls = [
         "http://10.39.0.82:24000/query",
-        "http://10.39.0.82:24100/query"
+        # "http://10.39.0.82:24100/query",
+        "http://10.39.0.83:24000/query",
+        "http://10.39.0.84:24000/query",
+        "http://10.39.0.81:24000/query",
     ]
 
     user_prompt = "This is the zoomed-in image of the object you asked for.\n Please generate the next thought and action. If you can get the answer, please reply with answer in <answer> </answer> tags. Otherwise, you can call the external function again.\n"
