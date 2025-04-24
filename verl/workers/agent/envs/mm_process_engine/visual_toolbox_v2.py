@@ -100,7 +100,7 @@ class VisualToolBoxV2(ToolBase):
             # Return an error observation if something goes wrong
             print(f'[DEBUG] Execute WRONG - {str(e)}')
             print(f'[DEBUG] {action_string=}')
-            obs = "<|im_end|>\n<|im_start|>user\n" + f"Error: {str(e)}" + "<|im_end|>\n<|im_start|>assistant\n",
+            obs = "<|im_end|>\n<|im_start|>user\n" + f"Error: {str(e)}" + "<|im_end|>\n<|im_start|>assistant\n"
             reward = 0.0  # No reward for failed execution
             done = False
             info = {"error": str(e), "status": "failed"}
