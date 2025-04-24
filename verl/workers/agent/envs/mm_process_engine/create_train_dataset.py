@@ -36,8 +36,9 @@ if __name__ == '__main__':
 
     data_source = 'vstar'
     data_path = '/fs-computility/mabasic/yangminghao/data/MinghaoYang/mmreasoning/ziwei/distilled'
-    env_name = "visual_toolbox_v3"
-    instruction_prompt = PROMPT.USER_PROMPT_V3
+    env_name = "visual_toolbox_v2"
+    sys_prompt = PROMPT.SYSTEM_PROMPT_V2
+    instruction_prompt = PROMPT.USER_PROMPT_V2
 
     # dataset = datasets.load_dataset('json', os.path.join(data_path, 'dataset.jsonl'))
 
@@ -89,7 +90,7 @@ if __name__ == '__main__':
                 "prompt": [
                     {
                         "role": "system",
-                        "content": "",
+                        "content": sys_prompt,
                     },
                     {
                         "role": "user",
@@ -119,7 +120,7 @@ if __name__ == '__main__':
     local_dir = args.local_dir
     hdfs_dir = args.hdfs_dir
 
-    dataset.to_parquet(os.path.join(local_dir, 'vl_agent_V3_train_gqa_6k_new.parquet'))
+    dataset.to_parquet(os.path.join(local_dir, 'vl_agent_V2_train_gqa_6k_new.parquet'))
 
     if hdfs_dir is not None:
         makedirs(hdfs_dir)

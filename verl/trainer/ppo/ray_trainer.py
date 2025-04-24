@@ -881,7 +881,7 @@ class RayPPOTrainer:
         The light-weight advantage computation is done on the driver process.
         """
         from omegaconf import OmegaConf
-
+        from verl.utils.tracking import Tracking
         logger = Tracking(
             trainer_config=self.config,
             config=OmegaConf.to_container(self.config, resolve=True)        )

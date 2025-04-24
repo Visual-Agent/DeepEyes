@@ -106,7 +106,7 @@ Judgement:"""
 
 def compute_score(predict_str: str, ground_truth: str, extra_info=None) -> float:
     is_format_error = False
-    predict_str = "<think>" + predict_str
+    # predict_str = "<think>" + predict_str
     count_think_1 = predict_str.count("<think>")
     count_think_2 = predict_str.count("</think>")
     if count_think_1 != count_think_2:

@@ -11,7 +11,7 @@ import json
 
 class VisualToolBoxV2(ToolBase):
     name = "visual_toolbox_v2"
-    user_prompt = "Here is the processed image returned after you calling the function {}.\nIf the images provided above are sufficient to answer the user's question, please put your final answer within <answer></answer>. Otherwise you can continue to call tools."
+    user_prompt = "Here is the processed image returned after you calling the function {}.\nIf the images provided above are sufficient to answer the user's question, please put your final answer within <answer></answer>. Otherwise you can continue to call tools within <tool_call></tool_call>."
 
     def __init__(self, _name, _desc, _params, **kwargs):
         super().__init__(
@@ -22,8 +22,8 @@ class VisualToolBoxV2(ToolBase):
 
 
     def extract_answer(self, action_string: str) -> Dict[str, any]:
-        answer = re.search(r'<answer>(.*?)</answer>', action_string, re.DOTALL)
-        return answer
+        answer = re.findall(r'<answer>(.*?)</answer>', action_string, re.DOTALL)
+        return answer[-1] if answer else None
         
     def extract_action(self, action_string: str) -> Dict[str, Any]:
         """
@@ -39,15 +39,7 @@ class VisualToolBoxV2(ToolBase):
             ValueError: If no tool call is found or JSON is invalid.
         """
         tool_call_match = re.search(r'<tool_call>(.*?)</tool_call>', action_string, re.DOTALL)
-        if not tool_call_match:
-            raise ValueError("No tool call found in the action string.")
-        
-        tool_call_json = tool_call_match.group(1).strip()
-        try:
-            tool_call = json.loads(tool_call_json)
-            return tool_call
-        except json.JSONDecodeError as e:
-            raise ValueError(f"Invalid JSON in tool call: {e}")
+        return tool_call_match[-1] if tool_call_match else None
 
     def execute(self, action_string: str, **kwargs) -> tuple:
         """
@@ -67,6 +59,8 @@ class VisualToolBoxV2(ToolBase):
             if answer:
                 return "", 0.0, True, {}
             tool_call = self.extract_action(action_string)
+            if not tool_call:
+                return "", 0.0, True, {}
             tool_name = tool_call["name"]
             args = tool_call["arguments"]
             
@@ -96,7 +90,7 @@ class VisualToolBoxV2(ToolBase):
                 "prompt": "<|im_end|>\n<|im_start|>user\n" + "<tool_response>" +"<image>" + self.user_prompt.format(tool_call) + "</tool_response>" + "<|im_end|>\n<|im_start|>assistant\n",
                 "multi_model_data": {"image": [current_image]}
             }
-            reward = 0.1  # Reward for successful tool call with correct JSON
+            reward = 0.0  # Reward for successful tool call with correct JSON
             done = False
             info = {"status": "success", "tool_used": tool_name}
             print(f'[DEBUG] SUCCESS ACTION {action_string=}')
@@ -106,10 +100,7 @@ class VisualToolBoxV2(ToolBase):
             # Return an error observation if something goes wrong
             print(f'[DEBUG] Execute WRONG - {str(e)}')
             print(f'[DEBUG] {action_string=}')
-            obs = {
-                "prompt": f"<|im_start|>user\nError: {str(e)}<|im_end|>\n<|im_start|>assistant\n",
-                "multi_model_data": None,
-            }
+            obs = "<|im_end|>\n<|im_start|>user\n" + f"Error: {str(e)}" + "<|im_end|>\n<|im_start|>assistant\n",
             reward = 0.0  # No reward for failed execution
             done = False
             info = {"error": str(e), "status": "failed"}

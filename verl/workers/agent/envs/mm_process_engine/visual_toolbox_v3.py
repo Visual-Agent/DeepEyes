@@ -65,7 +65,13 @@ class VisualToolBoxV3(ToolBase):
         action = self.extract_action(action_string)
         if not action:
             return "", 0.0, True, {}
-        tool_call = eval(action.strip())
+        
+        try:
+            tool_call = json.loads(action.strip())  # 或使用 literal_eval
+        except Exception as e:
+            error_msg = f"Invalid action format: {action.strip()}. Error: {e}"
+            return [{"role": "user", "content": error_msg}], 0.0, False, {}
+        
         print(f"DEBUG{tool_call=}")
         cropped_bbox = self.get_bbox_2d(tool_call)
         if not cropped_bbox:

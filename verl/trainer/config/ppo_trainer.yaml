@@ -126,7 +126,7 @@ actor_rollout_ref:
       concurrent_workers: 1
       tool_name_key: env_name
       tool_meta_key: null
-      custom_stop: []
+      custom_stop: ["</tool_call>"]
       show_tqdm: True
       vl_model_path: ${actor_rollout_ref.model.path}
       max_vllm_images: 50
