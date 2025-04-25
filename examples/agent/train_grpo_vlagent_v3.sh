@@ -9,7 +9,7 @@ export NCCL_DEBUG=WARN
 export WANDB_API_KEY=7d84dc21bf59f2e0dd3f214b75a53786cd8fc5d8
 
 PROJECT_NAME=vlagent_grpo
-EXPERIMENT_NAME=multiturn_gqa6k_0.9acc*toll_0.1format
+EXPERIMENT_NAME=multiturn_gqa6k_0.8acc_-0.2format_0.4tool
 BASE_MODEL=/cpfs/user/zhengziwei/HF_HOME/hub/models--Qwen--Qwen2.5-VL-7B-Instruct/snapshots/6e6556e8ce728c7b3e438d75ebf04ec93403dc19
 VISUAL_DATASET_TRAIN=/cpfs/user/zhengziwei/workspace/agent/VeRL-Agent/data/vlagent/parquet/train_GQA_1t_fail.parquet
 VISUAL_DATASET_TEST=/cpfs/user/zhengziwei/workspace/agent/VeRL-Agent/data/vlagent/parquet/val_GQA_1t_fail.parquet

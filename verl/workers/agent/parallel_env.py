@@ -158,9 +158,9 @@ def agent_rollout_loop(config, vllm_engine, vllm_inputs, prompts, multi_modal_in
         if sum(active_mask) == 0:
             break
 
-        max_image_mask = [len(v["multi_modal_data"]["image"]) <= config.agent.max_vllm_images for v in vllm_input_list]
+        # max_image_mask = [len(v["multi_modal_data"]["image"]) <= config.agent.max_vllm_images for v in vllm_input_list]
         active_indices = [idx for idx, is_active in enumerate(active_mask) if is_active]
-        active_vllm_inputs = [vinput for vinput, is_active, is_valid in zip(vllm_input_list, active_mask, max_image_mask) if is_active and is_valid]
+        active_vllm_inputs = [vinput for vinput, is_active in zip(vllm_input_list, active_mask) if is_active]
         # try:
         actions = vllm_engine.generate(
             prompts=active_vllm_inputs,

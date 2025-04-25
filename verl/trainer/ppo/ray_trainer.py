@@ -886,12 +886,13 @@ class RayPPOTrainer:
         to construct the PPO dataflow.
         The light-weight advantage computation is done on the driver process.
         """
+        from verl.utils.tracking import Tracking
         from omegaconf import OmegaConf
 
-        logger = Tracking(project_name=self.config.trainer.project_name,
-                          experiment_name=self.config.trainer.experiment_name,
-                          default_backend=self.config.trainer.logger,
-                          config=OmegaConf.to_container(self.config, resolve=True))
+        logger = Tracking(
+            trainer_config=self.config,
+            config=OmegaConf.to_container(self.config, resolve=True)
+        )
 
         self.global_steps = 0
 

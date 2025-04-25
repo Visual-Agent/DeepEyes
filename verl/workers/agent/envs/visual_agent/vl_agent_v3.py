@@ -29,14 +29,14 @@ Otherwise, please put your final answer in <answer> </answer> tags.
 """
     answer_start = '<answer>'
     answer_end = '</answer>'
-    
+
     # <tool_call>\n{"name": "zoom_in", "arguments": {"object": "woman\'s jacket"}}\n</tool_call>
     
     def __init__(self, _name, _desc, _params, **kwargs):
         self.chatml_history = []
         self.multi_modal_data = None
         super().__init__(name=self.name)
-
+    
     def execute(self, action_string, **kwargs):
         answers = extract_tool_call_contents(self.answer_start, self.answer_end, action_string)
         if answers:
@@ -49,25 +49,25 @@ Otherwise, please put your final answer in <answer> </answer> tags.
         if not action_list:
             return '', 0.0, True, {}
 
-        cropped_bbox_list = self.get_bbox_2d(action_list)
-        if not cropped_bbox_list:
+        cropped_bbox = self.get_bbox_2d(action_list)
+        if not cropped_bbox:
             user_msg = [{"role": "user", "content": "ZOOM IN ARGUMENTS ARE INVALID"}]
             return user_msg, 0.0, False, {}
 
         # TODO: modify here and process the final output
         try:
             pil_img = self.multi_modal_data['image'][0]
-            cropped_image_list = [pil_img.crop(bbox) for bbox in cropped_bbox_list]
+            cropped_image = pil_img.crop(cropped_bbox)
         except Exception as err:
             user_msg = [{"role": "user", "content": "ZOOM IN AREA IS INVALID"}]
             return user_msg, 0.0, False, {}
 
-        if len(cropped_image_list) > 3:
-            cropped_image_list = cropped_image_list[:3]
+        # if len(cropped_image_list) > 3:
+        #     cropped_image_list = cropped_image_list[:3]
         
-        user_msg = '<image>' * len(cropped_image_list) + self.user_prompt
+        user_msg = '<image>' * 1 + self.user_prompt
         chat_msg = [{"role": "user", "content": user_msg}]
-        obs_dict = {"chat": chat_msg, "multi_modal_data": {"image": cropped_image_list}}
+        obs_dict = {"chat": chat_msg, "multi_modal_data": {"image": [cropped_image]}}
         return obs_dict, 0.0, False, {}
 
 
@@ -76,26 +76,19 @@ Otherwise, please put your final answer in <answer> </answer> tags.
         self.multi_modal_data = origin_multi_modal_data
         assert 'image' in self.multi_modal_data.keys(), f'[ERROR] {origin_multi_modal_data=}'
         assert len(self.multi_modal_data['image']) > 0, f'[ERROR] {self.multi_modal_data["image"]=}'
-        
-        self.height = self.multi_modal_data['image'][0].height
-        self.width = self.multi_modal_data['image'][0].width
 
 
     def get_bbox_2d(self, action_list):
         if not action_list:
             return None
         
-        bbox_list = []
         for action in action_list:
             if not action:
                 continue
             try:
                 bbox_info = eval(action)
                 if isinstance(bbox_info, list):
-                    for bbox in bbox_info:
-                        bbox_2d = bbox['bbox_2d']
-                        self.check_single_bbox(bbox_2d)
-                        bbox_list.append(self.maybe_resize_bbox(*bbox_2d))
+                    bbox_2d = bbox_info[0]['bbox_2d']
                 else:
                     bbox_2d = bbox_info['bbox_2d']
                 assert isinstance(bbox_2d, list), f"[ERROR] invalid bbox_2d type: {bbox_2d=}"
@@ -104,24 +97,17 @@ Otherwise, please put your final answer in <answer> </answer> tags.
                     print(f' [ERROR] bbox={bbox_2d} is invalid')
                 return self.maybe_resize_bbox(*bbox_2d)
             except Exception as err:
-                print(f' [ERROR] unexpected {err=}, {action=}')
+                print(f' [ERROR] unexpected {err=}')
                 continue
-        
-        return bbox_list
+        return None
 
 
-    def check_single_bbox(self, bbox_2d):
-        assert isinstance(bbox_2d, list), f"[ERROR] invalid bbox_2d type: {bbox_2d=}"
-        assert len(bbox_2d) == 4, f"[ERROR] invalid size for {bbox_2d=}"
-        assert self.validate_bbox(*bbox_2d)
-    
-    
     def validate_bbox(self, left, top, right, bottom):
         try:
             assert left < right and bottom > top, f'invalid shape for {left=}, {top=}, {right=}, {bottom=}'
             height = bottom - top
             width = right - left
-            assert max(height, width) / min(height, width) <= 100, f"aspect ratio error: {left=}, {top=}, {right=}, {bottom=}"
+            assert max(height, width) / min(height, width) <= 200, f"aspect ratio error: {left=}, {top=}, {right=}, {bottom=}"
             return True
         except Exception as err:
             print(f' [ERROR vl_agent #2] {err=}')
@@ -129,13 +115,6 @@ Otherwise, please put your final answer in <answer> </answer> tags.
 
 
     def maybe_resize_bbox(self, left, top, right, bottom):
-        left = max(0, left)
-        top = max(0, top)
-        right = min(self.width, right)
-        bottom = min(self.height, bottom)
-        if not self.validate_bbox(left, top, right, bottom):
-            return None
-
         height = bottom - top
         width = right - left
         if height < 28 or width < 28:
@@ -148,8 +127,6 @@ Otherwise, please put your final answer in <answer> </answer> tags.
             new_right = ceil(center_x + new_half_width)
             new_top = floor(center_y - new_half_height)
             new_bottom = ceil(center_y + new_half_height)
-            if not self.validate_bbox(new_left, new_top, new_right, new_bottom):
-                return None
             return [new_left, new_top, new_right, new_bottom]
         return [left, top, right, bottom]
 
@@ -160,4 +137,3 @@ if __name__ == '__main__':
 
     observation, reward, done, info = tool.execute(action_string=action_text)
     print (observation)
-

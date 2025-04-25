@@ -113,9 +113,9 @@ class NaiveRewardManager:
             #     action_mask=action_mask.cpu().numpy().tolist(),
             # )
 
-            debug_output_str = json.dumps(debug_output, ensure_ascii=False)
-            with open('/cpfs/user/fengyuan/code/github/verl/checkpoints/agent_ppo_debug/visual_agent_32b_v0.jsonl', 'a+') as fout:
-                fout.write(debug_output_str + '\n')
+            # debug_output_str = json.dumps(debug_output, ensure_ascii=False)
+            # with open('/cpfs/user/fengyuan/code/github/verl/checkpoints/agent_ppo_debug/visual_agent_32b_v0.jsonl', 'a+') as fout:
+            #     fout.write(debug_output_str + '\n')
 
             if data_source not in already_print_data_sources:
                 already_print_data_sources[data_source] = 0
