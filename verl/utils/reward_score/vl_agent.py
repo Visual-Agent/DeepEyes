@@ -3,13 +3,9 @@ import requests
 import random
 import re
 
-openai_api_key = "zzw-114514"
+openai_api_key = ""
 
 openai_api_base_list = [
-    # "http://10.39.11.28:10000/v1",
-    # "http://10.39.11.27:10000/v1",
-    # "http://10.39.23.170:8000/v1",
-    "http://10.39.7.176:8000/v1"
 ]
 
 client_list = []

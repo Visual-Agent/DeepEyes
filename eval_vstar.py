@@ -23,9 +23,9 @@ import io
 from openai import OpenAI
 import requests
 
-openai_api_key = "zzw-114514"
+openai_api_key = ""
 # openai_api_base = "http://localhost:8000/v1"
-openai_api_base = "http://10.39.19.140:8000/v1"
+openai_api_base = ""
 
 client = OpenAI(
     api_key=openai_api_key,
