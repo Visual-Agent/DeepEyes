@@ -31,7 +31,7 @@ except ImportError:
     from torch.distributed._tensor import DTensor
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--backend", type=str, required=True, help="The backend of the model", choices=["fsdp", "megatron"])
+parser.add_argument("--backend", type=str, default="fsdp", help="The backend of the model", choices=["fsdp", "megatron"])
 parser.add_argument("--tie-word-embedding", action="store_true", help="Whether to tie word embedding weights")
 parser.add_argument("--is-value-model", action="store_true", help="Whether the model loaded as value model")
 parser.add_argument("--hf_model_path", type=str, required=True, help="The path for the huggingface model")

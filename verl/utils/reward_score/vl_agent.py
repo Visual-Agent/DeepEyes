@@ -1,12 +1,15 @@
 from openai import OpenAI
 import requests
 import random
+import re
 
-openai_api_key = "EMPTY"
+openai_api_key = "zzw-114514"
 
 openai_api_base_list = [
-    "http://10.39.11.28:10000/v1",
-    "http://10.39.11.27:10000/v1",
+    # "http://10.39.11.28:10000/v1",
+    # "http://10.39.11.27:10000/v1",
+    # "http://10.39.23.170:8000/v1",
+    "http://10.39.7.176:8000/v1"
 ]
 
 client_list = []
@@ -18,9 +21,11 @@ for api_base in openai_api_base_list:
     client_list.append(client)
 model_name_list = []
 for client in client_list:
-    response = requests.get(f"{api_base}/models")
-    models = response.json()
-    model_name_list.append(models['data'][0]['id'])
+    models = client.models.list()
+    model_name_list.append(models.data[0].id)
+    # response = requests.get(f"{api_base}/models")
+    # models = response.json()
+    # model_name_list.append(models['data'][0]['id'])
 
 
 
@@ -107,11 +112,11 @@ Judgement:"""
 
 def compute_score(predict_str: str, ground_truth: str, extra_info=None) -> float:
     is_format_error = False
-    predict_str = "<think>" + predict_str
-    count_think_1 = predict_str.count("<think>")
-    count_think_2 = predict_str.count("</think>")
-    if count_think_1 != count_think_2:
-        is_format_error = True
+    # predict_str = "<think>" + predict_str
+    # count_think_1 = predict_str.count("<think>")
+    # count_think_2 = predict_str.count("</think>")
+    # if count_think_1 != count_think_2:
+    #     is_format_error = True
 
     count_vision_1 = predict_str.count("<|vision_start|><|image_pad|><|image_pad|>")
     count_vision_2 = predict_str.count("<|image_pad|><|image_pad|><|vision_end|>")
@@ -162,7 +167,7 @@ def compute_score(predict_str: str, ground_truth: str, extra_info=None) -> float
 
     tool_reward = 1.0 if count_vision_1 > 0 else 0.0
     format_reward = -1.0 if is_format_error else 0.0
-    return 0.8 * acc_reward + 0.2 * format_reward + 0.4 * tool_reward
+    return 0.5 * acc_reward + 0.1 * format_reward + 1.0 * tool_reward * acc_reward
 
 
 if __name__ == '__main__':

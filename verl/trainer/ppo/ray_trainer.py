@@ -603,6 +603,8 @@ class RayPPOTrainer:
                 tool_name_key = self.config.actor_rollout_ref.rollout.agent.tool_name_key
                 if tool_name_key and tool_name_key in test_batch.non_tensor_batch.keys():
                     test_gen_batch.non_tensor_batch[tool_name_key] = test_batch.non_tensor_batch.pop(tool_name_key)
+                if 'env_info' in test_batch.non_tensor_batch.keys():
+                    test_gen_batch.non_tensor_batch['env_info'] = test_batch.non_tensor_batch['env_info']
 
             test_gen_batch.meta_info = {
                 "eos_token_id": self.tokenizer.eos_token_id,
@@ -631,6 +633,10 @@ class RayPPOTrainer:
             # evaluate using reward_function
             result = self.val_reward_fn(test_batch, return_dict=True)
             reward_tensor = result["reward_tensor"]
+
+            if 'env_reward' in test_batch.batch.keys():
+                reward_tensor += test_batch.batch['env_reward']
+
             scores = reward_tensor.sum(-1).cpu().tolist()
             sample_scores.extend(scores)
 
@@ -880,15 +886,12 @@ class RayPPOTrainer:
         to construct the PPO dataflow.
         The light-weight advantage computation is done on the driver process.
         """
+        from verl.utils.tracking import Tracking
         from omegaconf import OmegaConf
 
-        from verl.utils.tracking import Tracking
-
         logger = Tracking(
-            project_name=self.config.trainer.project_name,
-            experiment_name=self.config.trainer.experiment_name,
-            default_backend=self.config.trainer.logger,
-            config=OmegaConf.to_container(self.config, resolve=True),
+            trainer_config=self.config,
+            config=OmegaConf.to_container(self.config, resolve=True)
         )
 
         self.global_steps = 0
@@ -940,7 +943,9 @@ class RayPPOTrainer:
                     tool_name_key = self.config.actor_rollout_ref.rollout.agent.tool_name_key
                     if tool_name_key and tool_name_key in batch.non_tensor_batch.keys():
                         gen_batch.non_tensor_batch[tool_name_key] = batch.non_tensor_batch.pop(tool_name_key)
-                        print(f' [DEBUG trainer] {gen_batch.non_tensor_batch.keys()=}')
+                        # print(f' [DEBUG trainer] {gen_batch.non_tensor_batch.keys()=}')
+                    if 'env_info' in batch.non_tensor_batch.keys():
+                        gen_batch.non_tensor_batch['env_info'] = batch.non_tensor_batch['env_info']
 
                 is_last_step = self.global_steps >= self.total_training_steps
 
@@ -1043,6 +1048,11 @@ class RayPPOTrainer:
                         else:
                             batch.batch["token_level_rewards"] = batch.batch["token_level_scores"]
 
+                        if 'env_reward' in batch.batch.keys():
+                            # print(f' [DEBUG reward] rewards_before={batch.batch["token_level_rewards"].mean().item()}')
+                            batch.batch['token_level_rewards'] += batch.batch['env_reward']
+                            # print(f' [DEBUG reward] rewards_after={batch.batch["token_level_rewards"].mean().item()}')
+
                         # compute advantages, executed on the driver process
                         norm_adv_by_std_in_grpo = self.config.algorithm.get(
                             "norm_adv_by_std_in_grpo", True
@@ -1100,7 +1110,7 @@ class RayPPOTrainer:
                     metrics.update(compute_agent_metrics(batch=batch))
 
                 # TODO: make a canonical logger that supports various backend
-                logger.log(data=metrics, step=self.global_steps)
+                logger.log(data=metrics, step=self.global_steps, batch=batch, tokenizer=self.tokenizer)
 
                 if is_last_step:
                     pprint(f"Final validation metrics: {last_val_metrics}")

@@ -1,0 +1,19 @@
+```json
+[
+    {"bbox_2d": [0, 0, 28, 58], "label": "color of the hat"}
+]
+```<|im_end|><|im_start|>user
+<|vision_start|><|image_pad|><|image_pad|><|image_pad|><|image_pad|><|image_pad|><|image_pad|><|image_pad|><|image_pad|><|image_pad|><|image_pad|><|image_pad|><|image_pad|><|image_pad|><|image_pad|><|image_pad|><|image_pad|><|image_pad|><|image_pad|><|image_pad|><|image_pad|><|image_pad|><|image_pad|><|image_pad|><|image_pad|><|image_pad|><|image_pad|><|image_pad|><|image_pad|><|image_pad|><|image_pad|><|image_pad|><|image_pad|><|vision_end|>
+If the images provided above are not sufficient to answer the user's question, please generate grouding results in JSON format:
+```json
+[
+    {"bbox_2d": [x1, y1, x2, y2], "label": "label name"}
+]
+```
+The zoomed-in images of your grounding results will be provided in next turn.
+
+Otherwise, please put your final answer in <answer> </answer> tags.
+<|im_end|>
+<|im_start|>assistant
+<answer>
+The final answer based on the reset images is that the color of the hat is tan.</answer><|im_end|>

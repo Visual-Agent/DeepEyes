@@ -16,8 +16,10 @@ from io import BytesIO
 from typing import Optional, Union
 
 import torch
-from PIL import Image
-from qwen_vl_utils import fetch_image, fetch_video
+from PIL import Image, ImageFilter
+from qwen_vl_utils import fetch_video
+from qwen_vl_utils.vision_process import to_rgb, smart_resize, IMAGE_FACTOR, MIN_PIXELS, MAX_PIXELS
+import requests, copy, base64
 
 
 def process_raw_image(image: dict):
@@ -32,18 +34,88 @@ def process_raw_image(image: dict):
     return image
 
 
-def process_image(image: Union[dict, Image.Image]) -> Image.Image:
+def process_image(image: Union[dict, Image.Image], blur_strength=None, downsample=None) -> Image.Image:
     if isinstance(image, dict):
         image = Image.open(BytesIO(image['bytes']))
 
     if isinstance(image, Image.Image):
-        return image.convert("RGB")
+        image = image.convert("RGB")
+        if blur_strength:
+            image = smart_blur(image, blur_strength=blur_strength)
+        if downsample:
+            original_size = image.size
+            ds = min(downsample, min(original_size[0] // 28, original_size[1] // 28))
+            image = image.resize((original_size[0] // ds, original_size[1] // ds))
+        return image
 
     if "bytes" in image:
         assert "image" not in image, "Cannot have both `bytes` and `image`"
         image["image"] = BytesIO(image["bytes"])
 
-    return fetch_image(image)
+    return fetch_image(image, blur_strength=blur_strength, downsample=downsample)
+
+
+def smart_blur(image: Image.Image, blur_strength: float = 0.005) -> Image.Image:
+    max_dim = max(image.width, image.height)
+    radius = max_dim * blur_strength
+    return image.filter(ImageFilter.GaussianBlur(radius=radius))
+
+
+def fetch_image(ele: dict[str, str | Image.Image], size_factor: int = IMAGE_FACTOR, blur_strength=None, downsample=None) -> Image.Image:
+    if "image" in ele:
+        image = ele["image"]
+    else:
+        image = ele["image_url"]
+    image_obj = None
+    if isinstance(image, Image.Image):
+        image_obj = image
+    elif image.startswith("http://") or image.startswith("https://"):
+        # fix memory leak issue while using BytesIO
+        with requests.get(image, stream=True) as response:
+            response.raise_for_status()
+            with BytesIO(response.content) as bio:
+                image_obj = copy.deepcopy(Image.open(bio))
+    elif image.startswith("file://"):
+        image_obj = Image.open(image[7:])
+    elif image.startswith("data:image"):
+        if "base64," in image:
+            _, base64_data = image.split("base64,", 1)
+            data = base64.b64decode(base64_data)
+            # fix memory leak issue while using BytesIO
+            with BytesIO(data) as bio:
+                image_obj = copy.deepcopy(Image.open(bio))
+    else:
+        image_obj = Image.open(image)
+    if image_obj is None:
+        raise ValueError(f"Unrecognized image input, support local path, http url, base64 and PIL.Image, got {image}")
+    image = to_rgb(image_obj)
+    ## resize
+    if "resized_height" in ele and "resized_width" in ele:
+        resized_height, resized_width = smart_resize(
+            ele["resized_height"],
+            ele["resized_width"],
+            factor=size_factor,
+        )
+    else:
+        width, height = image.size
+        min_pixels = ele.get("min_pixels", MIN_PIXELS)
+        max_pixels = ele.get("max_pixels", MAX_PIXELS)
+        resized_height, resized_width = smart_resize(
+            height,
+            width,
+            factor=size_factor,
+            min_pixels=min_pixels,
+            max_pixels=max_pixels,
+        )
+    image = image.resize((resized_width, resized_height))
+    
+    if blur_strength:
+        image = smart_blur(image, blur_strength=blur_strength)
+    if downsample:
+        original_size = image.size
+        image = image.resize((original_size[0] // downsample, original_size[1] // downsample))
+
+    return image
 
 
 VIDEO_FORMAT_HELP = """Currently, we only support the video formats introduced in qwen2-vl.

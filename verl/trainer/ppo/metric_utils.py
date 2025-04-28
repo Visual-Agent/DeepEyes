@@ -23,12 +23,21 @@ import numpy as np
 import torch
 
 from verl import DataProto
+from collections import Counter, defaultdict
+from functools import partial
+import torch.nn.functional as F
 
 
 def reduce_metrics(metrics: Dict[str, List[Any]]) -> Dict[str, Any]:
     for key, val in metrics.items():
         metrics[key] = np.mean(val)
     return metrics
+
+
+def count_turn_num(tensor):
+    padded = F.pad(tensor, (1, 0))
+    diff = padded[:, 1:] - padded[:, :-1]
+    return diff == 1
 
 
 def _compute_response_info(batch: DataProto) -> Dict[str, Any]:
@@ -44,8 +53,10 @@ def _compute_response_info(batch: DataProto) -> Dict[str, Any]:
         action_mask = batch.batch['action_mask'][:, -batch.batch['responses'].shape[-1]:]
         obs_mask = response_mask * (1 - action_mask)
         obs_length = obs_mask.sum(-1).float()
+        turn_num = count_turn_num(obs_mask).sum(-1).float()
     else:
         obs_length = torch.zeros_like(response_length)
+        turn_num = torch.zeros_like(response_length)
     response_length -= obs_length
 
     return dict(
@@ -53,6 +64,7 @@ def _compute_response_info(batch: DataProto) -> Dict[str, Any]:
         prompt_length=prompt_length,
         response_length=response_length,
         obs_length=obs_length,
+        turn_num=turn_num
     )
 
 
@@ -72,9 +84,10 @@ def compute_data_metrics(batch: DataProto, use_critic: bool = True) -> Dict[str,
     max_prompt_length = prompt_mask.size(-1)
 
     response_info = _compute_response_info(batch)
-    prompt_length = response_info["prompt_length"]
-    response_length = response_info["response_length"]
-    obs_length = response_info["obs_length"]
+    prompt_length = response_info['prompt_length']
+    response_length = response_info['response_length']
+    obs_length = response_info['obs_length']
+    turn_num = response_info['turn_num']
 
     valid_adv = torch.masked_select(advantages, response_mask)
     valid_returns = torch.masked_select(returns, response_mask)
@@ -127,6 +140,11 @@ def compute_data_metrics(batch: DataProto, use_critic: bool = True) -> Dict[str,
         'obs_length/mean': torch.mean(obs_length).detach().item(),
         'obs_length/min': torch.min(obs_length).detach().item(),
         'obs_length/max': torch.max(obs_length).detach().item(),
+        
+        # action num
+        'turn_num/mean': torch.mean(turn_num).detach().item(),
+        'turn_num/min': torch.min(turn_num).detach().item(),
+        'turn_num/max': torch.max(turn_num).detach().item(),
 
         # prompt length
         "prompt_length/mean": torch.mean(prompt_length).detach().item(),
