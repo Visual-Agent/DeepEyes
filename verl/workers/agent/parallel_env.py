@@ -173,7 +173,7 @@ def agent_rollout_loop(config, vllm_engine, vllm_inputs, prompts, multi_modal_in
         #     print(f' [DEBUG TOOL_NUM] vllm_input_list {step=}, len={[len(v["multi_modal_data"]["image"]) for v in vllm_input_list]}')
         #     print(f' [DEBUG TOOL_NUM] active_vllm_inputs {step=}, len={[len(v["multi_modal_data"]["image"]) for v in active_vllm_inputs]}')
         #     assert 1==2
-        observations, rewards, dones, info = env.step(actions)
+        observations, rewards, dones, info = env.step(active_indices, actions)
 
         for idx, obs, act, rew, done in zip(active_indices, observations, actions, rewards, dones):
             # process response token ids
@@ -387,7 +387,7 @@ class ParallelEnv:
         # type: List[ Dict[ Str, ToolBase subclasses ] ]
         self.tools = []
 
-    def step(self, actions):
+    def step(self, active_indices, actions):
         """
         Input:
         - actions: vllm.RequestOutput
@@ -407,10 +407,11 @@ class ParallelEnv:
         reward_list = [0.0] * len(actions)
         done_list = []
         valid_indices = []
+        real_indices = []
         valid_actions = []
         
         # 1. filtering valid actions
-        for idx, act in enumerate(actions):
+        for i, (idx, act) in enumerate(zip(active_indices, actions)):
             if act.outputs[0].finish_reason == 'length':
                 done_list.append(True)
                 continue
@@ -420,13 +421,15 @@ class ParallelEnv:
                 continue
 
             done_list.append(False)
+            real_indices.append(i)
             valid_indices.append(idx)
             valid_actions.append(act.outputs[0].text)
 
         agent_inputs = []
-        for idx, action in zip(valid_indices, valid_actions):
+        for i, idx, action in zip(real_indices, valid_indices, valid_actions):
             agent_inputs.append(dict(
-                idx=idx,
+                idx=i,
+                valid_idx=idx,
                 action=action,
                 tool=self.tools[idx],
             ))

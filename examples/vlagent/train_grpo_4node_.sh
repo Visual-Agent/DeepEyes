@@ -8,8 +8,8 @@ export VLLM_USE_MODELSCOPE=false
 export NCCL_DEBUG=WARN
 export WANDB_API_KEY=7d84dc21bf59f2e0dd3f214b75a53786cd8fc5d8
 
-PROJECT_NAME=vlagent_vx
-EXPERIMENT_NAME=multiturn_all21k_0.5acc_-0.1format_1acctool_4node_ds4
+PROJECT_NAME=vlagent_vx_new
+EXPERIMENT_NAME=multiturn_all21k_0.8acc_-0.2format_0.4tool_4node_ds1
 BASE_MODEL=/cpfs/user/zhengziwei/HF_HOME/hub/models--Qwen--Qwen2.5-VL-7B-Instruct/snapshots/6e6556e8ce728c7b3e438d75ebf04ec93403dc19
 
 VISUAL_DATASET_TRAIN_1=/cpfs/user/zhengziwei/workspace/agent/VeRL-Agent/data/vlagent/parquet/train_GQA_1t_fail.parquet
@@ -69,8 +69,7 @@ if [ "$RANK" = "0" ]; then
         actor_rollout_ref.ref.fsdp_config.param_offload=True \
         actor_rollout_ref.rollout.agent.activate_agent=True \
         actor_rollout_ref.rollout.agent.tool_name_key=env_name \
-        actor_rollout_ref.rollout.agent.single_response_max_tokens=2048 \
-        actor_rollout_ref.rollout.agent.single_obs_max_length=8192 \
+        actor_rollout_ref.rollout.agent.single_response_max_tokens=4096 \
         actor_rollout_ref.rollout.agent.max_turns=4 \
         actor_rollout_ref.rollout.agent.concurrent_workers=1 \
         actor_rollout_ref.rollout.agent.show_tqdm=True \

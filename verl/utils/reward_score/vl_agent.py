@@ -3,9 +3,13 @@ import requests
 import random
 import re
 
-openai_api_key = ""
+openai_api_key = "zzw-114514"
 
 openai_api_base_list = [
+    # "http://10.39.11.28:10000/v1",
+    # "http://10.39.11.27:10000/v1",
+    # "http://10.39.23.170:8000/v1",
+    "http://10.39.7.176:8000/v1"
 ]
 
 client_list = []
@@ -163,7 +167,7 @@ def compute_score(predict_str: str, ground_truth: str, extra_info=None) -> float
 
     tool_reward = 1.0 if count_vision_1 > 0 else 0.0
     format_reward = -1.0 if is_format_error else 0.0
-    return 0.5 * acc_reward + 0.1 * format_reward + 1.0 * tool_reward * acc_reward
+    return 0.8 * acc_reward + 0.2 * format_reward + 0.4 * tool_reward
 
 
 if __name__ == '__main__':
