@@ -140,7 +140,7 @@ def compute_score(predict_str: str, ground_truth: str) -> float:
     doc_pattern = re.compile(r'<\|begin_of_documents\|>(.*?)<\|end_of_documents\|>', re.DOTALL)
     doc_match = re.search(doc_pattern, predict_str)
 
-    retrieval_reward = 1.0 if count_7 >= 1 else -1.0
+    retrieval_reward = 1.0 if count_7 >= 1 else 0.0
     # em_score = exact_match.compute(references=[ground_truth], predictions=[answer_text], ignore_case=True, ignore_punctuation=True)
     acc_reward, _ , _ = f1_score(answer_text, ground_truth)
     acc_reward = 2.0 * acc_reward

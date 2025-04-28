@@ -98,26 +98,26 @@ class NaiveRewardManager:
             # reward_tensor[i, eos_idx] = score
 
             # FOR DEBUGGING ONLY!!! DO NOT COMMIT!!!
-            action_mask = action_or_attn_mask[i, prompt_length: prompt_length + valid_response_length]
-            env_reward = data_item.batch['env_reward'][:valid_response_length]
-            debug_output = dict(
-                step=self.step_cnt,
-                timetag=str(datetime.datetime.now()),
-                prompt=prompt_str,
-                response=response_str,
-                ground_truth=str(ground_truth),
-                score=float(score),
-                env_reward_sum=float(env_reward.cpu().numpy().sum()),
-                valid_prompt_length=int(valid_prompt_length.cpu().item()),
-                valid_response_length=int(valid_response_length.cpu().item()),
-                prompt_ids=valid_prompt_ids.cpu().numpy().tolist(),
-                response_ids=valid_response_ids.cpu().numpy().tolist(),
-                action_mask=action_mask.cpu().numpy().tolist(),
-            )
+            # action_mask = action_or_attn_mask[i, prompt_length: prompt_length + valid_response_length]
+            # env_reward = data_item.batch['env_reward'][:valid_response_length]
+            # debug_output = dict(
+            #     step=self.step_cnt,
+            #     timetag=str(datetime.datetime.now()),
+            #     prompt=prompt_str,
+            #     response=response_str,
+            #     ground_truth=str(ground_truth),
+            #     score=float(score),
+            #     env_reward_sum=float(env_reward.cpu().numpy().sum()),
+            #     valid_prompt_length=int(valid_prompt_length.cpu().item()),
+            #     valid_response_length=int(valid_response_length.cpu().item()),
+            #     prompt_ids=valid_prompt_ids.cpu().numpy().tolist(),
+            #     response_ids=valid_response_ids.cpu().numpy().tolist(),
+            #     action_mask=action_mask.cpu().numpy().tolist(),
+            # )
 
-            debug_output_str = json.dumps(debug_output, ensure_ascii=False)
-            with open('/cpfs/user/fengyuan/code/github/verl/checkpoints/agent_ppo_debug/visual_agent_32b_v0.jsonl', 'a+') as fout:
-                fout.write(debug_output_str + '\n')
+            # debug_output_str = json.dumps(debug_output, ensure_ascii=False)
+            # with open('/cpfs/user/fengyuan/code/github/verl/checkpoints/agent_ppo_debug/visual_agent_32b_v0528.jsonl', 'a+') as fout:
+            #     fout.write(debug_output_str + '\n')
 
             if data_source not in already_print_data_sources:
                 already_print_data_sources[data_source] = 0

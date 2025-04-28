@@ -121,7 +121,6 @@ actor_rollout_ref:
     agent:
       activate_agent: False
       single_response_max_tokens: 32768
-      single_obs_max_length: 32768
       max_turns: 50
       concurrent_workers: 1
       tool_name_key: env_name

@@ -1,3 +1,4 @@
+import re
 import torch
 import numpy as np
 from tqdm import tqdm
@@ -11,6 +12,19 @@ from verl.utils import hf_tokenizer, hf_processor
 from verl.utils.dataset.vision_utils import process_image, process_raw_image, process_video
 from verl.utils.torch_functional import pad_2d_list_to_length
 from verl.workers.agent.tool_envs import ToolBase
+
+def _strip_system_block(text: str) -> str:
+    """
+    删除 text 中第一个 <|im_start|>system ... <|im_end|> 区块（含标签），
+    并返回删除后的字符串。
+    如果找不到匹配的开始或结束标签，则返回原文。
+    """
+    # 非贪婪匹配，匹配跨行
+    pattern = r"<\|im_start\|>system.*?<\|im_end\|>"
+    # 替换为空
+    result = re.sub(pattern, "", text, flags=re.S)
+    return result
+
 
 def _concat_vllm_input(prompt_token_ids, response_token_ids, tokenizer=None):
     # NOTE: temporarily fix qwen-base oov issue
@@ -77,23 +91,6 @@ def _preprocess_multi_modal_inputs(prompt_str, processor, **kwargs):
         model_inputs.pop("second_per_grid_ts")
 
     mm_inputs = dict(model_inputs)
-    print(f' [DEBUG mm_inputs] {mm_inputs.keys()=}')
-    # image_inputs = processor.image_processor(input_mm_data["image"], return_tensors='pt')
-    # image_grid_thw = image_inputs['image_grid_thw']
-    # mm_inputs = {key: val for key, val in image_inputs.items()}
-
-    # if image_grid_thw is not None:
-    #     merge_length = processor.image_processor.merge_size**2
-    #     index = 0
-    #     while '<image>' in prompt_str:
-    #         prompt_str = prompt_str.replace(
-    #             '<image>',
-    #             '<|vision_start|>' + '<|placeholder|>' * (image_grid_thw[index].prod() // merge_length) +
-    #             '<|vision_end|>',
-    #             1,
-    #         )
-    #         index += 1
-    #     prompt_str = prompt_str.replace('<|placeholder|>', processor.image_token)
     return vllm_input_prompt, input_ids, mm_inputs
 
 
@@ -114,13 +111,28 @@ def agent_rollout_loop(config, vllm_engine, vllm_inputs, prompts, multi_modal_in
         agent_sampling_params.stop = prev_stop + custom_stop
         print(f' [DEBUG stop] {type(prev_stop)=}, {type(custom_stop)=}, {type(agent_sampling_params.stop)=}')
 
+    # Refer to: https://github.com/vllm-project/vllm/issues/1728
+    # and https://github.com/vllm-project/vllm/issues/15976
+    # def process_bad_tokens(token_ids, logits, exclude_token_ids=[]):
+    #     for token_id in exclude_token_ids:
+    #         logits[token_id] = -9999.999
+    #     return logits
+
+    # # NOTE: tmp for visual agent!
+    # exclude_func = partial(process_bad_tokens, exclude_token_ids=[
+    #     151643,    # <|endoftext|>
+    #     151644,    # <|im_start|>
+    # ])
+    # agent_sampling_params.logits_processors = [exclude_func]
+    agent_sampling_params.bad_words = ["<|endoftext|>", "<|im_start|>"]
+
+    tokenizer = hf_tokenizer(config.agent.vl_model_path)
+    processor = hf_processor(config.agent.vl_model_path)
+
     if multi_modal_inputs is not None:
         multi_modal_inputs = multi_modal_inputs.tolist()
     else:
         multi_modal_inputs = [{}] * len(vllm_inputs)
-
-    tokenizer = hf_tokenizer(config.agent.vl_model_path)
-    processor = hf_processor(config.agent.vl_model_path)
 
     env = ParallelEnv(config.agent, tokenizer, processor)
     env.reset(prompts, vllm_inputs, n=sampling_params.n)
@@ -163,7 +175,7 @@ def agent_rollout_loop(config, vllm_engine, vllm_inputs, prompts, multi_modal_in
             sampling_params=agent_sampling_params,
             use_tqdm=False
         )
-        observations, rewards, dones, info = env.step(actions)
+        observations, rewards, dones, info = env.step(active_indices, actions)
 
         for idx, obs, act, rew, done in zip(active_indices, observations, actions, rewards, dones):
             # process response token ids
@@ -316,33 +328,17 @@ def execute_tool_call(sample, tokenizer=None, processor=None, pbar=None):
 
     elif isinstance(tool_result, dict):
         # Format 3: {"prompt": "...", "chat": [{"role": "...", "content": "..."}, ...], "multi_modal_data": ...}
-        assert "prompt" in tool_result or 'chat' in tool_result, f"Neither `prompt` nor `chat` in {tool_result=}"
         prompt_str = tool_result.pop("prompt", "")
         chat_list = tool_result.pop("chat", [])
 
-        if len(prompt_str) > 0:
-            prompt_str_vllm, obs_token_ids_model, mm_inputs = _preprocess_multi_modal_inputs(prompt_str, processor, **tool_result)
-            obs_token_ids_vllm = tokenizer.encode(prompt_str_vllm, add_special_tokens=False, return_tensors='pt')[0]
+        if len(prompt_str) == 0 and len(chat_list) == 0:
+            raise ValueError("Both prompt_str and chat_list are invalid")
+        elif len(prompt_str) == 0 and len(chat_list) > 0:
+            prompt_str = tokenizer.apply_chat_template(chat_list, add_generation_prompt=True, tokenize=False)
+            prompt_str = _strip_system_block(prompt_str)
 
-        elif len(chat_list) > 0:
-            obs_str = tokenizer.apply_chat_template(chat_list, add_generation_prompt=True, tokenize=False)
-            obs_str_vllm, obs_token_ids_model, mm_inputs = _preprocess_multi_modal_inputs(obs_str, processor, **tool_result)
-            obs_token_ids_vllm = tokenizer.encode(obs_str_vllm, add_special_tokens=False, return_tensors='pt')[0]
-
-            # NOTE: skip the sp (and the \n token that comes after it) added by Qwen tokenizer
-            eos_start_idx = torch.nonzero(obs_token_ids_vllm == tokenizer.eos_token_id)
-            if eos_start_idx.shape[0] > 0:
-                eos_start_idx = eos_start_idx[0].item()
-                obs_token_ids_vllm = obs_token_ids_vllm[eos_start_idx + 2 : ]
-
-            eos_start_idx = torch.nonzero(obs_token_ids_model == tokenizer.eos_token_id)
-            if eos_start_idx.shape[0] > 0:
-                eos_start_idx = eos_start_idx[0].item()
-                obs_token_ids_model = obs_token_ids_model[eos_start_idx + 2 : ]
-
-        else:
-            raise ValueError(f"Neither prompt nor chat appears in {tool_result=}")
-
+        prompt_str_vllm, obs_token_ids_model, mm_inputs = _preprocess_multi_modal_inputs(prompt_str, processor, **tool_result)
+        obs_token_ids_vllm = tokenizer.encode(prompt_str_vllm, add_special_tokens=False, return_tensors='pt')[0]
         tool_result_info = {
             "prompt_token_ids_vllm": obs_token_ids_vllm,
             "prompt_token_ids_model": obs_token_ids_model,
@@ -371,7 +367,7 @@ class ParallelEnv:
         # type: List[ Dict[ Str, ToolBase subclasses ] ]
         self.tools = []
 
-    def step(self, actions):
+    def step(self, active_indices, actions):
         """
         Input:
         - actions: vllm.RequestOutput
@@ -391,10 +387,11 @@ class ParallelEnv:
         reward_list = [0.0] * len(actions)
         done_list = []
         valid_indices = []
+        real_indices = []
         valid_actions = []
         
         # 1. filtering valid actions
-        for idx, act in enumerate(actions):
+        for i, (idx, act) in enumerate(zip(active_indices, actions)):
             if act.outputs[0].finish_reason == 'length':
                 done_list.append(True)
                 continue
@@ -404,13 +401,15 @@ class ParallelEnv:
                 continue
 
             done_list.append(False)
+            real_indices.append(i)
             valid_indices.append(idx)
             valid_actions.append(act.outputs[0].text)
 
         agent_inputs = []
-        for idx, action in zip(valid_indices, valid_actions):
+        for i, idx, action in zip(real_indices, valid_indices, valid_actions):
             agent_inputs.append(dict(
-                idx=idx,
+                idx=i,
+                valid_idx=idx,
                 action=action,
                 tool=self.tools[idx],
             ))
