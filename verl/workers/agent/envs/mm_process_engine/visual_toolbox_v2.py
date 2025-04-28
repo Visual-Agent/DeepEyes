@@ -5,14 +5,15 @@ from typing import Optional, List, Dict, Any
 from PIL import Image
 import re
 import json
-
+from verl.workers.agent.envs.mm_process_engine.prompt import PROMPT
+from math import ceil, floor
 # 临时修复
 # ToolBase.registry = {}
 
 class VisualToolBoxV2(ToolBase):
     name = "visual_toolbox_v2"
-    user_prompt = "Here is the processed image returned after you calling the function {}.\nIf the images provided above are sufficient to answer the user's question, please put your final answer within <answer></answer>. Otherwise you can continue to call tools within <tool_call></tool_call>."
-
+    # user_prompt = "Here is the cropped image returned after you calling the function {}.\nIf the images provided above are sufficient to answer the user's question, please put your final answer within <answer></answer>. Otherwise you can continue to call tools within <tool_call></tool_call>."
+    user_prompt = PROMPT.USER_PROMPT_V2
     def __init__(self, _name, _desc, _params, **kwargs):
         super().__init__(
             name=self.name,
@@ -38,7 +39,7 @@ class VisualToolBoxV2(ToolBase):
         Raises:
             ValueError: If no tool call is found or JSON is invalid.
         """
-        tool_call_match = re.search(r'<tool_call>(.*?)</tool_call>', action_string, re.DOTALL)
+        tool_call_match = re.findall(r'<tool_call>(.*?)</tool_call>', action_string, re.DOTALL)
         return tool_call_match[-1] if tool_call_match else None
 
     def execute(self, action_string: str, **kwargs) -> tuple:
@@ -54,20 +55,32 @@ class VisualToolBoxV2(ToolBase):
             done: Whether the episode is terminated.
             info: Additional info.
         """
+        
+        answer = self.extract_answer(action_string)
+        if answer:
+            return "", 0.0, True, {}
+        action = self.extract_action(action_string)
+        if not action:
+            return "", 0.0, True, {}
         try:
-            answer = self.extract_answer(action_string)
-            if answer:
-                return "", 0.0, True, {}
-            tool_call = self.extract_action(action_string)
-            if not tool_call:
-                return "", 0.0, True, {}
+            tool_call = json.loads(action.strip())  # 或使用 literal_eval
+        except Exception as e:
+            error_msg = f"Invalid tool call format: {action.strip()}. Error: {e}"
+            obs = "<|im_end|>\n<|im_start|>user\n" + f"Error: {str(error_msg)}" + "<|im_end|>\n<|im_start|>assistant\n"
+            info = {"error": str(e), "status": "failed"}
+            return obs, 0.0, False, {}
+        try:
+
             tool_name = tool_call["name"]
             args = tool_call["arguments"]
-            
+        
             if tool_name == "image_zoom_in_tool":
                 # Zoom in by cropping the image
                 # image_path = args["image_path"]
-                bbox = args["bbox"]
+                bbox = args["bbox_2d"]
+                bbox = self.maybe_resize_bbox(*bbox)
+                if not bbox:
+                    raise ValueError(f"ZOOM IN ARGUMENTS ARE INVALID")
                 # img = Image.open(image_path)
                 img = self.multi_modal_data['image'][0]
                 cropped_img = img.crop(bbox)
@@ -84,22 +97,19 @@ class VisualToolBoxV2(ToolBase):
                 
             else:
                 raise ValueError(f"Unknown tool name: {tool_name}")
-            
             # Prepare the observation
             obs = {
-                "prompt": "<|im_end|>\n<|im_start|>user\n" + "<tool_response>" +"<image>" + self.user_prompt.format(tool_call) + "</tool_response>" + "<|im_end|>\n<|im_start|>assistant\n",
-                "multi_model_data": {"image": [current_image]}
+                "prompt": "<|im_end|>\n<|im_start|>user\n" + "<tool_response>" +"<image>" + self.user_prompt + "</tool_response>" + "<|im_end|>\n<|im_start|>assistant\n",
+                "multi_modal_data": {"image": [current_image]}
             }
             reward = 0.0  # Reward for successful tool call with correct JSON
             done = False
             info = {"status": "success", "tool_used": tool_name}
             print(f'[DEBUG] SUCCESS ACTION {action_string=}')
             return obs, reward, done, info
-            
         except Exception as e:
             # Return an error observation if something goes wrong
-            print(f'[DEBUG] Execute WRONG - {str(e)}')
-            print(f'[DEBUG] {action_string=}')
+            print(f'[DEBUG] Execute WRONG - {str(e)} {action_string=}')
             obs = "<|im_end|>\n<|im_start|>user\n" + f"Error: {str(e)}" + "<|im_end|>\n<|im_start|>assistant\n"
             reward = 0.0  # No reward for failed execution
             done = False
@@ -111,8 +121,47 @@ class VisualToolBoxV2(ToolBase):
         self.multi_modal_data = origin_multi_modal_data
         assert 'image' in self.multi_modal_data.keys(), f'[ERROR] {origin_multi_modal_data=}'
         assert len(self.multi_modal_data['image']) > 0, f'[ERROR] {self.multi_modal_data["image"]=}'
+        
+        self.height = self.multi_modal_data['image'][0].height
+        self.width = self.multi_modal_data['image'][0].width
+
+    def validate_bbox(self, left, top, right, bottom):
+        try:
+            assert left < right and bottom > top, f'invalid shape for {left=}, {top=}, {right=}, {bottom=}'
+            height = bottom - top
+            width = right - left
+            assert max(height, width) / min(height, width) <= 100, f"aspect ratio error: {left=}, {top=}, {right=}, {bottom=}"
+            return True
+        except Exception as err:
+            print(f' [ERROR vl_agent #2] {err=}')
+            return False
 
 
+    def maybe_resize_bbox(self, left, top, right, bottom):
+        left = max(0, left)
+        top = max(0, top)
+        right = min(self.width, right)
+        bottom = min(self.height, bottom)
+        if not self.validate_bbox(left, top, right, bottom):
+            return None
+
+        height = bottom - top
+        width = right - left
+        if height < 28 or width < 28:
+            center_x = (left + right) / 2.0
+            center_y = (top + bottom) / 2.0
+            ratio = 28 / min(height, width)
+            new_half_height = ceil(height * ratio * 0.5)
+            new_half_width = ceil(width * ratio * 0.5)
+            new_left = floor(center_x - new_half_width)
+            new_right = ceil(center_x + new_half_width)
+            new_top = floor(center_y - new_half_height)
+            new_bottom = ceil(center_y + new_half_height)
+            if not self.validate_bbox(new_left, new_top, new_right, new_bottom):
+                return None
+            return [new_left, new_top, new_right, new_bottom]
+        return [left, top, right, bottom]
+    
 if __name__ == "__main__":
     # Example usage (for testing)
     tool = VisualToolBox("visual_toolbox", "Tool for image processing", {})

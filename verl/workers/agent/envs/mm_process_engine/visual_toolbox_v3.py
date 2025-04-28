@@ -69,7 +69,7 @@ class VisualToolBoxV3(ToolBase):
         try:
             tool_call = json.loads(action.strip())  # 或使用 literal_eval
         except Exception as e:
-            error_msg = f"Invalid action format: {action.strip()}. Error: {e}"
+            error_msg = f"Invalid tool call format: {action.strip()}. Error: {e}"
             return [{"role": "user", "content": error_msg}], 0.0, False, {}
         
         print(f"DEBUG{tool_call=}")

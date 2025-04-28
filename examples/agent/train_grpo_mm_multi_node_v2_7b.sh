@@ -8,7 +8,7 @@ wandb login
 
 
 PROJECT_NAME="agent_vlagent"
-EXPERIMENT_NAME="visual_toolbox_v2_grpo_qwenvl32b"
+EXPERIMENT_NAME="visual_toolbox_v2_grpo_qwenvl7b"
 
 export SAVE_CHECKPOINT_DIR=/fs-computility/mabasic/yangminghao/project/VeRL-Agent/checkpoints
 # export VLLM_ATTENTION_BACKEND=XFORMERS # vllm + qwen2-7b with flash_attn has some issues
@@ -18,7 +18,7 @@ VISUAL_DATASET_TEST=/fs-computility/mabasic/yangminghao/data/MinghaoYang/mmreaso
 
 # data.train_files=${DATA_DIR}/vl_agent_V1.parquet \
 
-REF_MODEL_PATH=/fs-computility/mabasic/yangminghao/models/Qwen/Qwen2.5-VL-32B-Instruct
+REF_MODEL_PATH=/fs-computility/mabasic/yangminghao/models/Qwen/Qwen2.5-VL-7B-Instruct
 PYTHONUNBUFFERED=1 python3 -m verl.trainer.main_ppo \
     +debug=False \
     +vs_debug=False \
@@ -37,13 +37,12 @@ PYTHONUNBUFFERED=1 python3 -m verl.trainer.main_ppo \
     actor_rollout_ref.actor.use_kl_loss=False \
     actor_rollout_ref.actor.kl_loss_coef=0.0 \
     actor_rollout_ref.actor.kl_loss_type=low_var_kl \
-    actor_rollout_ref.actor.entropy_coeff=0.0 \
+    actor_rollout_ref.actor.entropy_coeff=0.0001 \
     actor_rollout_ref.actor.checkpoint.contents=['model','hf_model','optimizer','extra'] \
-    actor_rollout_ref.actor.ulysses_sequence_parallel_size=1 \
     actor_rollout_ref.rollout.log_prob_micro_batch_size_per_gpu=1 \
     actor_rollout_ref.rollout.tensor_model_parallel_size=4 \
     actor_rollout_ref.rollout.name=vllm \
-    actor_rollout_ref.rollout.n=16 \
+    actor_rollout_ref.rollout.n=8 \
     actor_rollout_ref.rollout.max_num_batched_tokens=32768 \
     actor_rollout_ref.rollout.gpu_memory_utilization=0.6 \
     actor_rollout_ref.rollout.enforce_eager=False \
@@ -59,7 +58,7 @@ PYTHONUNBUFFERED=1 python3 -m verl.trainer.main_ppo \
     actor_rollout_ref.rollout.agent.single_obs_max_length=8192 \
     actor_rollout_ref.rollout.agent.max_turns=4 \
     actor_rollout_ref.rollout.agent.concurrent_workers=1 \
-    actor_rollout_ref.rollout.agent.show_tqdm=False \
+    actor_rollout_ref.rollout.agent.show_tqdm=True \
     trainer.critic_warmup=0 \
     trainer.logger=['console','wandb','rl_logging_board'] \
     trainer.val_before_train=False \
