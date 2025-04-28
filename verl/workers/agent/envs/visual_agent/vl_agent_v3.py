@@ -16,9 +16,11 @@ from verl.workers.agent.tool_envs import ToolBase, extract_tool_call_contents
 class VLAgentEnvV3(ToolBase):
     name = "vl_agent_v3"
     
-    user_prompt = "<image>\nHere is the zoomed in image for your grounding region {}.\nIf the images provided above are sufficient to answer the user's question, please put your final answer within <answer></answer>. Otherwise generate a new grouding in JSON format."
+    user_prompt = "If the images are sufficient to answer the user's question, please put your final answer within <answer></answer>. Otherwise generate a new grouding in JSON format."
     answer_start = '<answer>'
     answer_end = '</answer>'
+
+    max_images_per_round = 3
 
     # <tool_call>\n{"name": "zoom_in", "arguments": {"object": "woman\'s jacket"}}\n</tool_call>
     
@@ -39,22 +41,36 @@ class VLAgentEnvV3(ToolBase):
         if not action_list:
             return '', 0.0, True, {}
 
-        cropped_bbox = self.get_bbox_2d(action_list)
-        if not cropped_bbox:
-            user_msg = [{"role": "user", "content": "ZOOM IN ARGUMENTS ARE INVALID"}]
-            return user_msg, 0.0, False, {}
+        cropped_bbox_list = self.get_bbox_2d(action_list)
+        if not cropped_bbox_list:
+            invalid_msg = [{"role": "user", "content": "ZOOM IN ARGUMENTS ARE INVALID"}]
+            return invalid_msg, 0.0, False, {}
 
-        # TODO: modify here and process the final output
-        try:
-            pil_img = self.multi_modal_data['image'][0]
-            cropped_image = pil_img.crop(cropped_bbox)
-        except Exception as err:
-            user_msg = [{"role": "user", "content": "ZOOM IN AREA IS INVALID"}]
-            return user_msg, 0.0, False, {}
+        all_user_msg, all_cropped_images = [], []
+        for cropped_bbox in cropped_bbox_list:
+            try:
+                pil_img = self.multi_modal_data['image'][0]
+                cropped_image = pil_img.crop(cropped_bbox['bbox_2d'])
+                all_cropped_images.append(cropped_image)
+                cropped_text = "<image>\nThis is the zoomed in image for grounding region {} of label \"{}\"."
+                cropped_text = cropped_text.format(cropped_bbox['bbox_2d'], cropped_bbox['label'])
+                all_user_msg.append(cropped_text)
+            except Exception as err:
+                print(f' [ERROR] crop image failed: {err=}')
+                continue
 
-        user_msg = self.user_prompt.format(cropped_bbox)
-        chat_msg = [{"role": "user", "content": user_msg}]
-        obs_dict = {"chat": chat_msg, "multi_modal_data": {"image": [cropped_image]}}
+        if not all_user_msg or not all_cropped_images:
+            invalid_msg = [{"role": "user", "content": "ZOOM IN AREA IS INVALID"}]
+            return invalid_msg, 0.0, False, {}
+
+        if len(all_user_msg) > self.max_images_per_round or len(all_cropped_images) > self.max_images_per_round:
+            all_user_msg = all_user_msg[:self.max_images_per_round]
+            all_cropped_images = all_cropped_images[:self.max_images_per_round]
+
+        all_user_msg.append(self.user_prompt)
+        all_user_msg_text = '\n\n'.join(all_user_msg)
+        chat_msg = [{"role": "user", "content": all_user_msg_text}]
+        obs_dict = {"chat": chat_msg, "multi_modal_data": {"image": all_cropped_images}}
         return obs_dict, 0.0, False, {}
 
 
@@ -72,25 +88,33 @@ class VLAgentEnvV3(ToolBase):
         if not action_list:
             return None
 
+        valid_bbox_list = []
         for action in action_list:
             if not action:
                 continue
             try:
                 bbox_info = eval(action)
                 if isinstance(bbox_info, list):
-                    bbox_2d = bbox_info[0]['bbox_2d']
-                else:
-                    bbox_2d = bbox_info['bbox_2d']
+                    bbox_info = bbox_info[0]
+                bbox_2d = bbox_info['bbox_2d']
+                label = bbox_info['label']
+                if not label or not isinstance(label, str):
+                    label = 'None'
+
                 assert isinstance(bbox_2d, list), f"[ERROR] invalid bbox_2d type: {bbox_2d=}"
                 assert len(bbox_2d) == 4, f"[ERROR] invalid size for {bbox_2d=}"
+                assert isinstance(bbox_2d[0], int), f"[ERROR] bbox_2d is not integer: {bbox_2d=}"
+
                 bbox_result = self.maybe_resize_bbox(*bbox_2d)
                 if not bbox_result:
                     continue
-                return bbox_result
+                bbox_info['bbox_2d'] = bbox_result
+                bbox_info['label'] = label
+                valid_bbox_list.append(bbox_info)
             except Exception as err:
                 print(f' [ERROR] unexpected {err=}')
                 continue
-        return None
+        return valid_bbox_list
 
 
     def validate_bbox(self, left, top, right, bottom):
