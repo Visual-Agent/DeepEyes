@@ -1,6 +1,7 @@
 from openai import OpenAI
 import requests
 import random
+import re
 
 openai_api_key = "EMPTY"
 
@@ -117,13 +118,19 @@ def compute_score(predict_str: str, ground_truth: str, extra_info=None) -> float
     if count_vision_1 != count_vision_2:
         is_format_error = True
 
-    predict_no_think = predict_str.split('</think>')[-1].strip()
-    count_answer_1 = predict_no_think.count("<answer>")
-    count_answer_2 = predict_no_think.count("</answer>")
-    if count_answer_1 != count_answer_2:
-        is_format_error = True
+    # predict_no_think = predict_str.split('</think>')[-1].strip()
+    # count_answer_1 = predict_no_think.count("<answer>")
+    # count_answer_2 = predict_no_think.count("</answer>")
+    # if count_answer_1 != count_answer_2:
+    #     is_format_error = True
 
-    answer_text = predict_str.split("<answer>")[-1].split("</answer>")[0].strip()
+    # answer_text = predict_str.split("<answer>")[-1].split("</answer>")[0].strip()
+
+    pattern = re.compile(r'<\|im_start\|>assistant(.*?)$', re.DOTALL)  # 匹配最后一个 target 后的所有内容
+
+    match = pattern.search(predict_str)
+    if match:
+        answer_text = match.group(1).strip()
     question_text = extra_info['question']
     full_prompt = get_prompt(answer_text, ground_truth, question_text)
 
@@ -168,7 +175,14 @@ def compute_score(predict_str: str, ground_truth: str, extra_info=None) -> float
     tool_reward_base = 1.0 if count_vision_1 > 0 else 0.0
     tool_reward = 1.0 if count_vision_1 > 0 and acc_reward > 0.5 else 0.0
     format_reward = -1.0 if is_format_error else 0.0
-    return 1.0 * acc_reward + 0.2 * format_reward + 1.0 * tool_reward + 0.2 * tool_reward_base
+    # reward 1
+    return 0.8 * acc_reward + 0.2 * format_reward + 0.4 * tool_reward_base  
+    # reward 2 
+    # return 1.0 * acc_reward + 0.2 * format_reward + 1.0 * tool_reward + 0.2 * tool_reward_base
+    # reward 3
+    # tool_reward_alpha = 1.2 if count_vision_1 > 0 else 0.0
+    # return 1.0 * acc_reward * tool_reward_alpha + 0.2 * format_reward
+
 
 
 if __name__ == '__main__':

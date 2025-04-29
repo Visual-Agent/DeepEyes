@@ -7,14 +7,14 @@ file_path =["/fs-computility/mabasic/yangminghao/data/MinghaoYang/mmreasoning/zi
             "/fs-computility/mabasic/yangminghao/data/MinghaoYang/mmreasoning/ziwei/parquet/train_spatial_relation_1t_fail.parquet",
             "/fs-computility/mabasic/yangminghao/data/MinghaoYang/mmreasoning/ziwei/parquet/train_vaw_attribute_1t_fail.parquet",
             ]
-system_prompt = PROMPT.SYSTEM_PROMPT_V2
-user_prompt =PROMPT.USER_PROMPT_V2
+system_prompt = PROMPT.SYSTEM_PROMPT_V5
+user_prompt =PROMPT.USER_PROMPT_V5
 
 for path in file_path:
     # 读取 Parquet 文件
     df = pd.read_parquet(path)
 
-    df['env_name'] = 'visual_toolbox_v2'
+    df['env_name'] = 'visual_toolbox_v5'
     df['data_source'] = 'vstar'
     for index, row in df.to_dict('index').items():
         row['prompt'][0]['content'] = system_prompt
@@ -27,7 +27,7 @@ for path in file_path:
 
     # 保存修改后的数据
     # output_path = "/fs-computility/mabasic/yangminghao/data/MinghaoYang/mmreasoning/ziwei/parquet/train_vaw_attribute_1t_fail_visual_toolbox_v2.parquet"
-    output_path = path.replace(".parquet", "_visual_toolbox_v2.parquet")
+    output_path = path.replace(".parquet", "_visual_toolbox_v5.parquet")
     df.to_parquet(output_path, index=False)
 
     print("自定义修改完成，已保存到:", output_path)

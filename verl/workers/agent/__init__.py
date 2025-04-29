@@ -7,6 +7,7 @@ from .envs.mm_process_engine.visual_toolbox import VisualToolBox
 from .envs.mm_process_engine.visual_toolbox_v2 import VisualToolBoxV2
 from .envs.mm_process_engine.visual_toolbox_v3 import VisualToolBoxV3
 from .envs.mm_process_engine.visual_toolbox_v4 import VisualToolBoxV4
+from .envs.mm_process_engine.visual_toolbox_v5 import VisualToolBoxV5
 from .envs.visual_agent.vl_agent_v2 import VLAgentEnvV2
 from .envs.visual_agent.vl_agent_v3 import VLAgentEnvV3
 
