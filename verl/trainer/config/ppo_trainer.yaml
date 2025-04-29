@@ -128,8 +128,8 @@ actor_rollout_ref:
       custom_stop: ["</tool_call>"]
       show_tqdm: True
       vl_model_path: ${actor_rollout_ref.model.path}
-      max_vllm_images: 50
-      max_vllm_videos: 2
+      max_vllm_images: 32
+      max_vllm_videos: 1
 
 critic:
   rollout_n: ${actor_rollout_ref.rollout.n}

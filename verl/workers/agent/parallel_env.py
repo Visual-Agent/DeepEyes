@@ -1,6 +1,7 @@
 import re
 import torch
 import numpy as np
+from copy import deepcopy
 from tqdm import tqdm
 from functools import partial
 from concurrent.futures import ThreadPoolExecutor
@@ -134,9 +135,6 @@ def agent_rollout_loop(config, vllm_engine, vllm_inputs, prompts, multi_modal_in
     else:
         multi_modal_inputs = [{}] * len(vllm_inputs)
 
-    env = ParallelEnv(config.agent, tokenizer, processor)
-    env.reset(prompts, vllm_inputs, n=sampling_params.n)
-
     batch_size = len(vllm_inputs)
     vllm_input_list = []
     running_states = []
@@ -147,19 +145,22 @@ def agent_rollout_loop(config, vllm_engine, vllm_inputs, prompts, multi_modal_in
     mm_input_list = []
     tool_call_cnt_list = []
 
+    env = ParallelEnv(config.agent, tokenizer, processor)
+    env.reset(prompts, vllm_inputs, n=sampling_params.n)
+
     # interleaving inputs if sampling_params.n > 1
     for i in range(batch_size):
         for _ in range(sampling_params.n):
-            vllm_input_list.append(vllm_inputs[i])
-            prompt_ids = prompts.batch['input_ids'][i, :]
+            vllm_input_list.append(deepcopy(vllm_inputs[i]))
+            prompt_ids = prompts.batch['input_ids'][i, :].clone()
             running_states.append(prompt_ids)
-            prompt_mask = prompts.batch['attention_mask'][i, :]
+            prompt_mask = prompts.batch['attention_mask'][i, :].clone()
             running_action_masks.append(prompt_mask)
             running_attn_masks.append(prompt_mask)
             reward_tensor = torch.zeros_like(prompt_ids, dtype=torch.float)
             reward_tensor_list.append(reward_tensor)
             active_mask.append(True)
-            mm_input_list.append(multi_modal_inputs[i])
+            mm_input_list.append(deepcopy(multi_modal_inputs[i]))
             tool_call_cnt_list.append(0)
 
     max_total_length = config.prompt_length + config.response_length
@@ -230,7 +231,7 @@ def agent_rollout_loop(config, vllm_engine, vllm_inputs, prompts, multi_modal_in
             if 'image' in mm_data.keys():
                 if 'multi_modal_data' not in vllm_input_list[idx].keys():
                     vllm_input_list[idx]['multi_modal_data'] = {"image": []}
-                print(f' [DEBUG img] {idx=} before update {len(mm_data["image"])=}')
+                print(f' [DEBUG img] {idx=} before update {len(vllm_input_list[idx]["multi_modal_data"]["image"])=}, {len(mm_data["image"])=}')
                 vllm_input_list[idx]['multi_modal_data']['image'] += mm_data['image']
                 print(f' [DEBUG img] {idx=} after update {len(vllm_input_list[idx]["multi_modal_data"]["image"])=}')
 
@@ -457,8 +458,8 @@ class ParallelEnv:
                     tool_fns = ToolBase.create(tool_name)
                     reset_output = tool_fns.reset(
                         raw_prompt=raw_prompt, 
-                        multi_modal_data=multi_modal_data,
-                        origin_multi_modal_data=origin_multi_modal_data,
+                        multi_modal_data=deepcopy(multi_modal_data),
+                        origin_multi_modal_data=deepcopy(origin_multi_modal_data),
                     )
                     self.tools.append(tool_fns)
                     reset_output_list.append(reset_output)

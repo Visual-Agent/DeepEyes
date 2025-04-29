@@ -1,7 +1,7 @@
 set -x
 
 PROJECT_NAME="agent_vlagent"
-EXPERIMENT_NAME="visual_agent_env_v3_model_32b_extra_tool_reward_v1"
+EXPERIMENT_NAME="visual_agent_env_v3_model_32b_extra_tool_reward_v51"
 
 export SAVE_CHECKPOINT_DIR=/diancpfs/user/fengyuan/verl_checkpoints
 # export VLLM_ATTENTION_BACKEND=XFORMERS # vllm + qwen2-7b with flash_attn has some issues
@@ -27,7 +27,7 @@ PYTHONUNBUFFERED=1 python3 -m verl.trainer.main_ppo \
     actor_rollout_ref.actor.ppo_mini_batch_size=128 \
     actor_rollout_ref.actor.ppo_micro_batch_size_per_gpu=2 \
     actor_rollout_ref.actor.use_kl_loss=True \
-    actor_rollout_ref.actor.kl_loss_coef=0.002 \
+    actor_rollout_ref.actor.kl_loss_coef=0.005 \
     actor_rollout_ref.actor.kl_loss_type=low_var_kl \
     actor_rollout_ref.actor.entropy_coeff=0 \
     actor_rollout_ref.actor.checkpoint.contents=['model','hf_model','optimizer','extra'] \
@@ -48,7 +48,7 @@ PYTHONUNBUFFERED=1 python3 -m verl.trainer.main_ppo \
     actor_rollout_ref.rollout.agent.activate_agent=True \
     actor_rollout_ref.rollout.agent.tool_name_key=env_name \
     actor_rollout_ref.rollout.agent.single_response_max_tokens=4096 \
-    actor_rollout_ref.rollout.agent.max_turns=6 \
+    actor_rollout_ref.rollout.agent.max_turns=7 \
     actor_rollout_ref.rollout.agent.concurrent_workers=1 \
     actor_rollout_ref.rollout.agent.show_tqdm=True \
     trainer.critic_warmup=0 \
