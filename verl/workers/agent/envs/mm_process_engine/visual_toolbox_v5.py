@@ -10,10 +10,10 @@ from math import ceil, floor
 # 临时修复
 # ToolBase.registry = {}
 
-class VisualToolBoxV2(ToolBase):
-    name = "visual_toolbox_v2"
+class VisualToolBoxV5(ToolBase):
+    name = "visual_toolbox_v5"
     # user_prompt = "Here is the cropped image returned after you calling the function {}.\nIf the images provided above are sufficient to answer the user's question, please put your final answer within <answer></answer>. Otherwise you can continue to call tools within <tool_call></tool_call>."
-    user_prompt = PROMPT.USER_PROMPT_V2
+    user_prompt = PROMPT.USER_PROMPT_V5
     def __init__(self, _name, _desc, _params, **kwargs):
         super().__init__(
             name=self.name,
@@ -22,26 +22,13 @@ class VisualToolBoxV2(ToolBase):
         self.multi_modal_data = None  # To store the current image being processed
         self.origin_multi_modal_data = None
 
-
     def extract_answer(self, action_string: str) -> Dict[str, any]:
         answer = re.findall(r'<answer>(.*?)</answer>', action_string, re.DOTALL)
         return answer[-1] if answer else None
         
     def extract_action(self, action_string: str) -> Dict[str, Any]:
-        """
-        Extracts the tool call from the action string.
-        
-        Args:
-            action_string: The string containing the tool call in XML tags.
-            
-        Returns:
-            A dictionary with the tool name and arguments.
-            
-        Raises:
-            ValueError: If no tool call is found or JSON is invalid.
-        """
-        tool_call_match = re.findall(r'<tool_call>(.*?)</tool_call>', action_string, re.DOTALL)
-        return tool_call_match[-1] if tool_call_match else None
+        tool_calls = re.findall(r'<tool_call>(.*?)</tool_call>', action_string, re.DOTALL)
+        return [{"tool_call": call.strip()} for call in tool_calls] if tool_calls else []
 
     def execute(self, action_string: str, **kwargs) -> tuple:
         """
@@ -57,55 +44,60 @@ class VisualToolBoxV2(ToolBase):
             info: Additional info.
         """
         
-        answer = self.extract_answer(action_string)
-        if answer:
-            return "", 0.0, True, {}
+        # answer = self.extract_answer(action_string)
+        # if answer:
+        #     return "", 0.0, True, {}
         action = self.extract_action(action_string)
         if not action:
             return "", 0.0, True, {}
+        # try:
+        #     tool_call = json.loads(action.strip())  # 或使用 literal_eval
+        # except Exception as e:
+        #     error_msg = f"Invalid tool call format: {action.strip()}. Error: {e}"
+        #     obs = "<|im_end|>\n<|im_start|>user\n" + f"Error: {str(error_msg)}" + "<|im_end|>\n<|im_start|>assistant\n"
+        #     info = {"error": str(e), "status": "failed"}
+        #     return obs, 0.0, False, {}
+        current_image = []
+        tool_call_str = "\n"
         try:
-            tool_call = json.loads(action.strip())  # 或使用 literal_eval
-        except Exception as e:
-            error_msg = f"Invalid tool call format: {action.strip()}. Error: {e}"
-            obs = "<|im_end|>\n<|im_start|>user\n" + f"Error: {str(error_msg)}" + "<|im_end|>\n<|im_start|>assistant\n"
-            info = {"error": str(e), "status": "failed"}
-            return obs, 0.0, False, {}
-        try:
+            for act in action:
+                tool_call_str += act['tool_call'] 
+                tool_call_str += "\n"
+                tool_call = json.loads(act['tool_call'])
 
-            tool_name = tool_call["name"]
-            args = tool_call["arguments"]
-        
-            if tool_name == "image_zoom_in_tool":
-                # Zoom in by cropping the image
-                # image_path = args["image_path"]
-                bbox = args["bbox_2d"]
-                cropped_bbox = self.maybe_resize_bbox(*bbox)
-                if not bbox:
-                    raise ValueError(f"ZOOM IN ARGUMENTS ARE INVALID")
-                # img = Image.open(image_path)
-                pil_img = self.origin_multi_modal_data['image'][0]
-                ds_width, ds_height = pil_img.width / self.width, pil_img.height / self.height
-                resized_bbox = [int(cropped_bbox[0] * ds_width), int(cropped_bbox[1] * ds_height),
-                                int(cropped_bbox[2] * ds_width), int(cropped_bbox[3] * ds_height)]
-                cropped_image = pil_img.crop(resized_bbox)
-                # cropped_img = img.crop(bbox)
-                current_image = cropped_image
-                
-            elif tool_name == "image_rotate_tool":
-                # Rotate the image
-                # image_path = args["image_path"]
-                angle = args["angle"]
-                # img = Image.open(image_path)
-                img = self.origin_multi_modal_data['image'][0]
-                rotated_img = img.rotate(angle)
-                current_image = rotated_img
-                
-            else:
-                raise ValueError(f"Unknown tool name: {tool_name}")
+                tool_name = tool_call["name"]
+                args = tool_call["arguments"]
+
+                if tool_name == "get_focused_image":
+                    # Zoom in by cropping the image
+                    # image_path = args["image_path"]
+                    bbox = args["bbox_2d"]
+                    cropped_bbox = self.maybe_resize_bbox(*bbox)
+                    if not bbox:
+                        raise ValueError(f"GROUNDING ARGUMENTS ARE INVALID")
+                    pil_img = self.origin_multi_modal_data['image'][0]
+                    ds_width, ds_height = pil_img.width / self.width, pil_img.height / self.height
+                    resized_bbox = [int(cropped_bbox[0] * ds_width), int(cropped_bbox[1] * ds_height),
+                                    int(cropped_bbox[2] * ds_width), int(cropped_bbox[3] * ds_height)]
+                    cropped_image = pil_img.crop(resized_bbox)
+                    current_image.append(cropped_image)
+                    
+                elif tool_name == "image_rotate_tool":
+                    # Rotate the image
+                    # image_path = args["image_path"]
+                    angle = args["angle"]
+                    # img = Image.open(image_path)
+                    img = self.multi_modal_data['image'][0]
+                    rotated_img = img.rotate(angle)
+                    current_image.append(rotated_img)
+                    
+                else:
+                    raise ValueError(f"Unknown tool name: {tool_name}")
             # Prepare the observation
+            image_token = "<image>" * len(current_image)
             obs = {
-                "prompt": "<|im_end|>\n<|im_start|>user\n" + "<tool_response>" +"<image>" + self.user_prompt + "</tool_response>" + "<|im_end|>\n<|im_start|>assistant\n",
-                "multi_modal_data": {"image": [current_image]}
+                "prompt": "<|im_end|>\n<|im_start|>user\n" + "<tool_response>" + image_token + "</tool_response>" + self.user_prompt.format(tool_call_str) + "<|im_end|>\n<|im_start|>assistant\n",
+                "multi_modal_data": {"image": current_image}
             }
             reward = 0.0  # Reward for successful tool call with correct JSON
             done = False
@@ -125,7 +117,7 @@ class VisualToolBoxV2(ToolBase):
         self.chatml_history = raw_prompt
         self.multi_modal_data = multi_modal_data
         self.origin_multi_modal_data = origin_multi_modal_data
-        assert 'image' in self.multi_modal_data.keys(), f'[ERROR] {multi_modal_data=}'
+        assert 'image' in self.multi_modal_data.keys(), f'[ERROR] {origin_multi_modal_data=}'
         assert len(self.multi_modal_data['image']) > 0, f'[ERROR] {self.multi_modal_data["image"]=}'
         
         self.height = self.multi_modal_data['image'][0].height

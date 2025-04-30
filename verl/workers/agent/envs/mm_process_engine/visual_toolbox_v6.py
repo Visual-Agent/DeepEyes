@@ -10,10 +10,10 @@ from math import ceil, floor
 # 临时修复
 # ToolBase.registry = {}
 
-class VisualToolBoxV2(ToolBase):
-    name = "visual_toolbox_v2"
+class VisualToolBoxV6(ToolBase):
+    name = "visual_toolbox_v6"
     # user_prompt = "Here is the cropped image returned after you calling the function {}.\nIf the images provided above are sufficient to answer the user's question, please put your final answer within <answer></answer>. Otherwise you can continue to call tools within <tool_call></tool_call>."
-    user_prompt = PROMPT.USER_PROMPT_V2
+    user_prompt = PROMPT.USER_PROMPT_V5
     def __init__(self, _name, _desc, _params, **kwargs):
         super().__init__(
             name=self.name,
@@ -41,7 +41,7 @@ class VisualToolBoxV2(ToolBase):
             ValueError: If no tool call is found or JSON is invalid.
         """
         tool_call_match = re.findall(r'<tool_call>(.*?)</tool_call>', action_string, re.DOTALL)
-        return tool_call_match[-1] if tool_call_match else None
+        return tool_call_match
 
     def execute(self, action_string: str, **kwargs) -> tuple:
         """
@@ -60,66 +60,57 @@ class VisualToolBoxV2(ToolBase):
         answer = self.extract_answer(action_string)
         if answer:
             return "", 0.0, True, {}
-        action = self.extract_action(action_string)
-        if not action:
+        action_list = self.extract_action(action_string)
+        if not action_list:
             return "", 0.0, True, {}
-        try:
-            tool_call = json.loads(action.strip())  # 或使用 literal_eval
-        except Exception as e:
-            error_msg = f"Invalid tool call format: {action.strip()}. Error: {e}"
-            obs = "<|im_end|>\n<|im_start|>user\n" + f"Error: {str(error_msg)}" + "<|im_end|>\n<|im_start|>assistant\n"
-            info = {"error": str(e), "status": "failed"}
-            return obs, 0.0, False, {}
-        try:
-
-            tool_name = tool_call["name"]
-            args = tool_call["arguments"]
         
-            if tool_name == "image_zoom_in_tool":
-                # Zoom in by cropping the image
-                # image_path = args["image_path"]
-                bbox = args["bbox_2d"]
-                cropped_bbox = self.maybe_resize_bbox(*bbox)
-                if not bbox:
-                    raise ValueError(f"ZOOM IN ARGUMENTS ARE INVALID")
-                # img = Image.open(image_path)
-                pil_img = self.origin_multi_modal_data['image'][0]
-                ds_width, ds_height = pil_img.width / self.width, pil_img.height / self.height
-                resized_bbox = [int(cropped_bbox[0] * ds_width), int(cropped_bbox[1] * ds_height),
-                                int(cropped_bbox[2] * ds_width), int(cropped_bbox[3] * ds_height)]
-                cropped_image = pil_img.crop(resized_bbox)
-                # cropped_img = img.crop(bbox)
-                current_image = cropped_image
+        env_response_list, env_image_list = [], []
+        
+        try:
+            for action in action_list:
+                tool_call = json.loads(action.strip())
+                tool_name = tool_call["name"]
+                args = tool_call["arguments"]
+        
+                if tool_name == "get_focused_image":
+                    bbox = args["bbox_2d"]
+                    cropped_bbox = self.maybe_resize_bbox(*bbox)
+                    if not bbox:
+                        raise ValueError(f"GROUNDING ARGUMENTS ARE INVALID")
+                    
+                    pil_img = self.origin_multi_modal_data['image'][0]
+                    ds_width, ds_height = pil_img.width / self.width, pil_img.height / self.height
+                    resized_bbox = [int(cropped_bbox[0] * ds_width), int(cropped_bbox[1] * ds_height),
+                                    int(cropped_bbox[2] * ds_width), int(cropped_bbox[3] * ds_height)]
+                    cropped_image = pil_img.crop(resized_bbox)
+
+                    env_response_list.append("<tool_response>\n" + json.dumps({**{"cropped region": "<image>"}, **args}) + "\n</tool_response>")
+                    env_image_list.append(cropped_image)
                 
-            elif tool_name == "image_rotate_tool":
-                # Rotate the image
-                # image_path = args["image_path"]
-                angle = args["angle"]
-                # img = Image.open(image_path)
-                img = self.origin_multi_modal_data['image'][0]
-                rotated_img = img.rotate(angle)
-                current_image = rotated_img
-                
+                else:
+                    raise ValueError(f"Unknown tool name: {tool_name}")
+            
+            env_response_list.append(self.user_prompt)
+            user_prompt = "<|im_end|>\n<|im_start|>user\n" + "\n".join(env_response_list) + "<|im_end|>\n<|im_start|>assistant\n"
+            if env_image_list:
+                obs = {"prompt": user_prompt, "multi_modal_data": {"image": env_image_list}}
             else:
-                raise ValueError(f"Unknown tool name: {tool_name}")
-            # Prepare the observation
-            obs = {
-                "prompt": "<|im_end|>\n<|im_start|>user\n" + "<tool_response>" +"<image>" + self.user_prompt + "</tool_response>" + "<|im_end|>\n<|im_start|>assistant\n",
-                "multi_modal_data": {"image": [current_image]}
-            }
-            reward = 0.0  # Reward for successful tool call with correct JSON
+                obs = {"prompt": user_prompt}
+            reward = 0.0
             done = False
             info = {"status": "success", "tool_used": tool_name}
             print(f'[DEBUG] SUCCESS ACTION {action_string=}')
             return obs, reward, done, info
+
         except Exception as e:
             # Return an error observation if something goes wrong
             print(f'[DEBUG] Execute WRONG - {str(e)} {action_string=}')
             obs = "<|im_end|>\n<|im_start|>user\n" + f"Error: {str(e)}" + "<|im_end|>\n<|im_start|>assistant\n"
-            reward = 0.0  # No reward for failed execution
+            reward = 0.0
             done = False
             info = {"error": str(e), "status": "failed"}
             return obs, reward, done, info
+        
 
     def reset(self, raw_prompt, multi_modal_data, origin_multi_modal_data, **kwargs):
         self.chatml_history = raw_prompt
@@ -141,7 +132,6 @@ class VisualToolBoxV2(ToolBase):
         except Exception as err:
             print(f' [ERROR vl_agent #2] {err=}')
             return False
-
 
     def maybe_resize_bbox(self, left, top, right, bottom):
         left = max(0, left)
@@ -170,40 +160,10 @@ class VisualToolBoxV2(ToolBase):
     
 if __name__ == "__main__":
     # Example usage (for testing)
-    tool = VisualToolBox("visual_toolbox", "Tool for image processing", {})
+    tool = VisualToolBoxV5("visual_toolbox", "Tool for image processing", {})
     
     # Test zoom in tool (should return reward=0.1)
-    zoom_in_action = """
-    <tool_call>
-    {"name": "image_zoom_in_tool", "arguments": {"image_path": "test.jpg", "bbox": [10, 10, 100, 100]}}
-    </tool_call>
-    """
+    zoom_in_action = '<think>\nThe image is a general view of a workspace. There are items on the desk, but there\'s no specific cup or object that can be clearly identified as a material of a cup. If you need a closer look at the material of a cup, we would need a focused image of a cup. However, since the red bounding box option was not provided in the instruction, I cannot call the function to get a focused image of the cup.\n\nThe question is about identifying he material of a cup, but without a specific and prioritized bounding box for the cup, it\'s not possible for me to answer definitively. If there\'s a particular cup you\'re referring to, please provide its bounding box coordinates, and I can provide a focused image of that area.\n</think>  \n<tool_call>\n{"name": "get_focused_image", "arguments": {"bbox_2d": [52, 205, 103, 137], "label": "cup"}}\n</tool_call>'
     obs, reward, done, info = tool.execute(zoom_in_action)
-    print(f"Zoom in result - Reward: {reward}, Info: {info}")
+    print(f"Zoom in result - obs: {obs}, Reward: {reward}, Info: {info}")
     
-    # Test rotate tool (should return reward=0.1)
-    rotate_action = """
-    <tool_call>
-    {"name": "image_rotate_tool", "arguments": {"image_path": "test.jpg", "angle": 90}}
-    </tool_call>
-    """
-    obs, reward, done, info = tool.execute(rotate_action)
-    print(f"Rotate result - Reward: {reward}, Info: {info}")
-    
-    # Test invalid JSON (should return reward=0.0)
-    invalid_action = """
-    <tool_call>
-    {"name": "image_rotate_tool", "arguments": {"image_path": "test.jpg", "angle": 90}
-    </tool_call>
-    """
-    obs, reward, done, info = tool.execute(invalid_action)
-    print(f"Invalid JSON result - Reward: {reward}, Info: {info}")
-    
-    # Test unknown tool (should return reward=0.0)
-    unknown_tool_action = """
-    <tool_call>
-    {"name": "unknown_tool", "arguments": {"param": "value"}}
-    </tool_call>
-    """
-    obs, reward, done, info = tool.execute(unknown_tool_action)
-    print(f"Unknown tool result - Reward: {reward}, Info: {info}")

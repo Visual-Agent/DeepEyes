@@ -5,7 +5,8 @@ import random
 openai_api_key = "EMPTY"
 
 openai_api_base_list = [
-    "http://172.30.52.123:8000/v1", # 72b-it
+    "http://10.39.11.28:10000/v1",
+    "http://10.39.11.27:10000/v1",
 ]
 
 client_list = []
@@ -141,7 +142,6 @@ def compute_score(predict_str: str, ground_truth: str, extra_info=None) -> float
         temperature=0.3,
     )
     response = chat_response.choices[0].message.content.strip()
-    # print(response)
     if 'Judgement:' in response:
         response = response.split('Judgement:')[-1].strip()
         if '1' in response:
@@ -168,7 +168,9 @@ def compute_score(predict_str: str, ground_truth: str, extra_info=None) -> float
     tool_reward_base = 1.0 if count_vision_1 > 0 else 0.0
     tool_reward = 1.0 if count_vision_1 > 0 and acc_reward > 0.5 else 0.0
     format_reward = -1.0 if is_format_error else 0.0
-    return 1.0 * acc_reward + 0.2 * format_reward + 1.0 * tool_reward + 0.2 * tool_reward_base
+    extra_reward = tool_reward_base * (count_vision_1 - 1) * (1 - acc_reward)
+    return 0.8 * acc_reward + 0.2 * format_reward + 0.4 * tool_reward_base + 0.2 * extra_reward
+    # return 0.8 * acc_reward + 0.2 * format_reward + 0.4 * tool_reward_base * count_vision_1
 
 
 if __name__ == '__main__':

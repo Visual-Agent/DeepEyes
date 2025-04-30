@@ -1,0 +1,5 @@
+Accuracy for direct_attributes: 85.22%
+Accuracy for relative_position: 89.47%
+Overall Accuracy: 86.91%
+{'direct_attributes': {'tool_acc': 98.0, 'tool_wrong': 17.0, 'notool_acc': 0.0, 'notoool_wrong': 0.0}, 'relative_position': {'tool_acc': 68.0, 'tool_wrong': 8.0, 'notool_acc': 0.0, 'notoool_wrong': 0.0}}
+{'direct_attributes': 0, 'relative_position': 0}

@@ -1,6 +1,7 @@
 import re
 import torch
 import numpy as np
+from copy import deepcopy
 from tqdm import tqdm
 from functools import partial
 from concurrent.futures import ThreadPoolExecutor
@@ -134,9 +135,6 @@ def agent_rollout_loop(config, vllm_engine, vllm_inputs, prompts, multi_modal_in
     else:
         multi_modal_inputs = [{}] * len(vllm_inputs)
 
-    env = ParallelEnv(config.agent, tokenizer, processor)
-    env.reset(prompts, vllm_inputs, n=sampling_params.n)
-
     batch_size = len(vllm_inputs)
     vllm_input_list = []
     running_states = []
@@ -145,21 +143,26 @@ def agent_rollout_loop(config, vllm_engine, vllm_inputs, prompts, multi_modal_in
     reward_tensor_list = []
     active_mask = []
     mm_input_list = []
+    turn_cnt_list = []
     tool_call_cnt_list = []
+
+    env = ParallelEnv(config.agent, tokenizer, processor)
+    env.reset(prompts, vllm_inputs, n=sampling_params.n)
 
     # interleaving inputs if sampling_params.n > 1
     for i in range(batch_size):
         for _ in range(sampling_params.n):
-            vllm_input_list.append(vllm_inputs[i])
-            prompt_ids = prompts.batch['input_ids'][i, :]
+            vllm_input_list.append(deepcopy(vllm_inputs[i]))
+            prompt_ids = prompts.batch['input_ids'][i, :].clone()
             running_states.append(prompt_ids)
-            prompt_mask = prompts.batch['attention_mask'][i, :]
+            prompt_mask = prompts.batch['attention_mask'][i, :].clone()
             running_action_masks.append(prompt_mask)
             running_attn_masks.append(prompt_mask)
             reward_tensor = torch.zeros_like(prompt_ids, dtype=torch.float)
             reward_tensor_list.append(reward_tensor)
             active_mask.append(True)
-            mm_input_list.append(multi_modal_inputs[i])
+            mm_input_list.append(deepcopy(multi_modal_inputs[i]))
+            turn_cnt_list.append(0)
             tool_call_cnt_list.append(0)
 
     max_total_length = config.prompt_length + config.response_length
@@ -203,7 +206,7 @@ def agent_rollout_loop(config, vllm_engine, vllm_inputs, prompts, multi_modal_in
             if done or step == config.agent.max_turns - 1:
                 active_mask[idx] = False
                 continue
-            tool_call_cnt_list[idx] += 1
+            turn_cnt_list[idx] += 1
 
             # process obs tokens and images
             if 'prompt_token_ids_vllm' in obs.keys():
@@ -230,9 +233,11 @@ def agent_rollout_loop(config, vllm_engine, vllm_inputs, prompts, multi_modal_in
             if 'image' in mm_data.keys():
                 if 'multi_modal_data' not in vllm_input_list[idx].keys():
                     vllm_input_list[idx]['multi_modal_data'] = {"image": []}
-                print(f' [DEBUG img] {idx=} before update {len(mm_data["image"])=}')
+                print(f' [DEBUG img] {idx=} before update {len(vllm_input_list[idx]["multi_modal_data"]["image"])=}, {len(mm_data["image"])=}')
                 vllm_input_list[idx]['multi_modal_data']['image'] += mm_data['image']
                 print(f' [DEBUG img] {idx=} after update {len(vllm_input_list[idx]["multi_modal_data"]["image"])=}')
+            
+            tool_call_cnt_list[idx] = len(vllm_input_list[idx]['multi_modal_data']['image']) - 1
 
             mm_input = obs.get('multi_modal_inputs', {})
             if mm_input:
@@ -273,7 +278,8 @@ def agent_rollout_loop(config, vllm_engine, vllm_inputs, prompts, multi_modal_in
     reward_tensor_list = [reward[: max_total_length] for reward in reward_tensor_list]
     reward_tensor = pad_2d_list_to_length(reward_tensor_list, 0.0, max_total_length).to(target_device)
 
-    tool_call_tensor = torch.tensor(tool_call_cnt_list, dtype=torch.float32).to(target_device).unsqueeze(1)
+    turn_cnt_tensor = torch.tensor(turn_cnt_list, dtype=torch.float32).to(target_device).unsqueeze(1)
+    tool_cnt_tensor = torch.tensor(tool_call_cnt_list, dtype=torch.float32).to(target_device).unsqueeze(1)
     return DataProto.from_dict(
         tensors={
             "response": state_tensor[:, -config.response_length: ],
@@ -281,7 +287,8 @@ def agent_rollout_loop(config, vllm_engine, vllm_inputs, prompts, multi_modal_in
             "attention_mask": attn_mask_tensor,
             "position_ids": position_ids_tensor,
             "env_reward": reward_tensor[:, -config.response_length: ],
-            "tool_cnt": tool_call_tensor,
+            "turn_cnt": turn_cnt_tensor,
+            "tool_cnt": tool_cnt_tensor,
         },
         non_tensors={"multi_modal_inputs": mm_input_list} if processor is not None else None
     )
@@ -296,7 +303,7 @@ def execute_tool_call(sample, tokenizer=None, processor=None, pbar=None):
         return {}, 0.0, True, {}
 
     tool_result, reward, done, info = tool.execute(action_string)
-    breakpoint()
+
     # post-process
     if not tool_result:
         tool_result_info = {}
@@ -457,8 +464,8 @@ class ParallelEnv:
                     tool_fns = ToolBase.create(tool_name)
                     reset_output = tool_fns.reset(
                         raw_prompt=raw_prompt, 
-                        multi_modal_data=multi_modal_data,
-                        origin_multi_modal_data=origin_multi_modal_data,
+                        multi_modal_data=deepcopy(multi_modal_data),
+                        origin_multi_modal_data=deepcopy(origin_multi_modal_data),
                     )
                     self.tools.append(tool_fns)
                     reset_output_list.append(reset_output)

@@ -78,3 +78,49 @@ The zoomed-in image of your grounding will be provided in next turn.
 
 The zoomed image will be provided in the next turn. Otherwise, provide your answer within <answer> </answer> tags.
 """
+
+    SYSTEM_PROMPT_V5 = """You are Qwen, created by Alibaba Cloud. You are a helpful assistant.
+
+Current Date: 2024-09-30
+
+# Tools
+
+You may call one or more functions to assist with the user query.
+
+You are provided with function signatures within <tools></tools> XML tags:
+<tools>
+{"type": "function", "function": {"name": "get_focused_image", "description": "Extract a cropped region from the original image based on a grounded bounding box (bbox) for detailed inspection.", "parameters": {"type": "object", "properties": {"bbox_2d": {"type": "array", "items":{"type":"number"}, "minItems":4, "maxItems":4, "description": "Bounding box coordinates for the region of interest in the format [x1, y1, x2, y2], where (x1, y1) represents the top-left corner and (x2, y2) the bottom-right corner."}, "label": {"type": "string", "description": "Optional label or identifier for the object within the specified bounding box."}}, "required": ["bbox_2d"]}}}
+</tools>
+
+For each function call, return a json object with function name and arguments within <tool_call></tool_call> XML tags:
+<tool_call>
+{"name": <function-name>, "arguments": <args-json-object>}
+</tool_call>"""
+
+    USER_PROMPT_V5 = "\nThink first, call **get_focused_image** if needed, then answer. Format strictly as:  <think>...</think>  <tool_call>...</tool_call> (if tools needed)  <answer>...</answer> "
+
+
+    SYSTEM_PROMPT_V7 = """You are a helpful assistant.
+
+# Tools
+
+You are provided with function signatures within <tools></tools> XML tags:
+<tools>
+{"type": "function", "function": {"name": "get_focused_image", "description": "Extract a cropped region from the original image based on a grounded bounding box (bbox) for detailed inspection.", "parameters": {"type": "object", "properties": {"bbox_2d": {"type": "array", "items":{"type":"number"}, "minItems":4, "maxItems":4, "description": "Bounding box coordinates for the region of interest in the format [x1, y1, x2, y2], where (x1, y1) represents the top-left corner and (x2, y2) the bottom-right corner."}, "label": {"type": "string", "description": "Optional label or identifier for the object within the specified bounding box."}}, "required": ["bbox_2d"]}}}
+</tools>
+
+For each function call, return a json object with function name and arguments within <tool_call></tool_call> XML tags:
+<tool_call>
+{"name": <function-name>, "arguments": <args-json-object>}
+</tool_call>
+
+You may call this function **one or more** times to assist with the user query.
+**Example**:  
+<tool_call>  
+{"name": "image_zoom_in_tool", "arguments": {"bbox_2d": [10, 20, 100, 200], "label": "the apple on the desk"}}  
+</tool_call>
+<tool_call>  
+{"name": "image_zoom_in_tool", "arguments": {"bbox_2d": [8, 40, 50, 150], "label": "the person under the tree"}}  
+</tool_call>"""
+
+    USER_PROMPT_V7 = "\nThink first, call **get_focused_image** one or more times if needed, then answer. Format strictly as:  <think>...</think>  <tool_call>...</tool_call> <tool_call>...</tool_call> (if tools needed) <answer>...</answer> "

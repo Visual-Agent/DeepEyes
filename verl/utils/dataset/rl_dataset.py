@@ -73,6 +73,8 @@ class RLHFDataset(Dataset):
         self.cache_dir = os.path.expanduser(config.get("cache_dir", "~/.cache/verl/rlhf"))
         self.prompt_key = config.get("prompt_key", "prompt")
         self.image_key = config.get("image_key", "images")
+        self.image_blur = config.get("image_blur", None)
+        self.image_downsample = config.get("image_downsample", None)
         self.video_key = config.get("video_key", "videos")
         self.max_prompt_length = config.get("max_prompt_length", 1024)
 
@@ -168,7 +170,7 @@ class RLHFDataset(Dataset):
             images = None
             if self.image_key in row_dict:
                 origin_images = [process_raw_image(image) for image in row_dict.get(self.image_key)]
-                images = [process_image(image) for image in row_dict.pop(self.image_key)]
+                images = [process_image(image, blur_strength=self.image_blur, downsample=self.image_downsample) for image in row_dict.pop(self.image_key)]
                 multi_modal_data["image"] = images
                 origin_multi_modal_data["image"] = origin_images
 

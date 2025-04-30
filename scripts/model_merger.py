@@ -31,7 +31,7 @@ except ImportError:
     from torch.distributed._tensor import DTensor
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--backend", type=str, required=True, help="The backend of the model", choices=["fsdp", "megatron"])
+parser.add_argument("--backend", type=str, default="fsdp", help="The backend of the model", choices=["fsdp", "megatron"])
 parser.add_argument("--tie-word-embedding", action="store_true", help="Whether to tie word embedding weights")
 parser.add_argument("--is-value-model", action="store_true", help="Whether the model loaded as value model")
 parser.add_argument("--hf_model_path", type=str, required=True, help="The path for the huggingface model")
@@ -41,7 +41,7 @@ parser.add_argument(
     required=True,
     help="The path for your saved model. For megatron, point to the base dir of model, rng, optimizer checkpoints, commonly be `config.default_local_dir/global_step_\{global_step\}`.",
 )
-parser.add_argument("--target_dir", required=False, default="tmp", type=str, help="The path for the target model")
+parser.add_argument("--target_dir", required=False, default=None, help="The path for the target model")
 parser.add_argument("--hf_upload_path", default=False, type=str, help="The path of the huggingface repo to upload")
 parser.add_argument("--test", action="store_true", help="test correctness of hf_model")
 parser.add_argument(
@@ -51,7 +51,7 @@ parser.add_argument(
     help="test correctness of hf_model, , with hf_model in checkpoint.contents",
 )
 args = parser.parse_args()
-os.makedirs(args.target_dir, exist_ok=True)
+# os.makedirs(args.target_dir, exist_ok=True)
 if args.test:
     assert args.test_hf_dir is not None, (
         "You must run verl save checkpoint first, with hf_model in checkpoint.contents, and provide the directory here"
