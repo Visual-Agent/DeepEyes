@@ -107,7 +107,7 @@ Judgement:"""
 
 def compute_score(predict_str: str, ground_truth: str, extra_info=None) -> float:
     is_format_error = False
-    # predict_str = "<think>" + predict_str
+    predict_str = "<think>" + predict_str
     count_think_1 = predict_str.count("<think>")
     count_think_2 = predict_str.count("</think>")
     if count_think_1 != count_think_2:
@@ -118,19 +118,22 @@ def compute_score(predict_str: str, ground_truth: str, extra_info=None) -> float
     if count_vision_1 != count_vision_2:
         is_format_error = True
 
-    # predict_no_think = predict_str.split('</think>')[-1].strip()
-    # count_answer_1 = predict_no_think.count("<answer>")
-    # count_answer_2 = predict_no_think.count("</answer>")
-    # if count_answer_1 != count_answer_2:
-    #     is_format_error = True
+    predict_no_think = predict_str.split('</think>')[-1].strip()
+    count_answer_1 = predict_no_think.count("<answer>")
+    count_answer_2 = predict_no_think.count("</answer>")
+    if count_answer_1 != count_answer_2:
+        is_format_error = True
 
-    # answer_text = predict_str.split("<answer>")[-1].split("</answer>")[0].strip()
+    answer_text = predict_str.split("<answer>")[-1].split("</answer>")[0].strip()
 
-    pattern = re.compile(r'<\|im_start\|>assistant(.*?)$', re.DOTALL)  # 匹配最后一个 target 后的所有内容
+    # pattern = re.compile(r'<\|im_start\|>assistant(.*?)$', re.DOTALL)  # 匹配最后一个 target 后的所有内容
+    # match = pattern.search(predict_str)
+    # if match:
+    #     answer_text = match.group(1).strip()
+    #     print(f'DEBUG{answer_text=}')
+    # else:
+    #     answer_text = ""
 
-    match = pattern.search(predict_str)
-    if match:
-        answer_text = match.group(1).strip()
     question_text = extra_info['question']
     full_prompt = get_prompt(answer_text, ground_truth, question_text)
 
@@ -182,6 +185,10 @@ def compute_score(predict_str: str, ground_truth: str, extra_info=None) -> float
     # reward 3
     # tool_reward_alpha = 1.2 if count_vision_1 > 0 else 0.0
     # return 1.0 * acc_reward * tool_reward_alpha + 0.2 * format_reward
+    # reward 4
+    # extra_reward = tool_reward_base * (count_vision_1 - 1) * (1 - acc_reward)
+    # return  0.8 * acc_reward + 0.2 * format_reward + 0.4 * tool_reward_base  + 0.2 * extra_reward
+
 
 
 

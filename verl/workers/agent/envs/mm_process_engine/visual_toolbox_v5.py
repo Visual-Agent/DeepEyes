@@ -14,6 +14,7 @@ class VisualToolBoxV5(ToolBase):
     name = "visual_toolbox_v5"
     # user_prompt = "Here is the cropped image returned after you calling the function {}.\nIf the images provided above are sufficient to answer the user's question, please put your final answer within <answer></answer>. Otherwise you can continue to call tools within <tool_call></tool_call>."
     user_prompt = PROMPT.TURN_PROMPT_V5
+    max_action_per_turn = 3
     def __init__(self, _name, _desc, _params, **kwargs):
         super().__init__(
             name=self.name,
@@ -22,9 +23,9 @@ class VisualToolBoxV5(ToolBase):
         self.multi_modal_data = None  # To store the current image being processed
 
 
-    # def extract_answer(self, action_string: str) -> Dict[str, any]:
-    #     answer = re.findall(r'<answer>(.*?)</answer>', action_string, re.DOTALL)
-    #     return answer[-1] if answer else None
+    def extract_answer(self, action_string: str) -> Dict[str, any]:
+        answer = re.findall(r'<answer>(.*?)</answer>', action_string, re.DOTALL)
+        return answer[-1] if answer else None
         
     def extract_action(self, action_string: str) -> Dict[str, Any]:
         tool_calls = re.findall(r'<tool_call>(.*?)</tool_call>', action_string, re.DOTALL)
@@ -44,9 +45,9 @@ class VisualToolBoxV5(ToolBase):
             info: Additional info.
         """
         
-        # answer = self.extract_answer(action_string)
-        # if answer:
-        #     return "", 0.0, True, {}
+        answer = self.extract_answer(action_string)
+        if answer:
+            return "", 0.0, True, {}
         action = self.extract_action(action_string)
         if not action:
             return "", 0.0, True, {}
@@ -57,6 +58,8 @@ class VisualToolBoxV5(ToolBase):
         #     obs = "<|im_end|>\n<|im_start|>user\n" + f"Error: {str(error_msg)}" + "<|im_end|>\n<|im_start|>assistant\n"
         #     info = {"error": str(e), "status": "failed"}
         #     return obs, 0.0, False, {}
+        if len(action) > self.max_action_per_turn:
+            action = action[:self.max_action_per_turn]
         current_image = []
         tool_call_str = "\n"
         try:
@@ -64,7 +67,6 @@ class VisualToolBoxV5(ToolBase):
                 tool_call_str += act['tool_call'] 
                 tool_call_str += "\n"
                 tool_call = json.loads(act['tool_call'])
-
                 tool_name = tool_call["name"]
                 args = tool_call["arguments"]
 
@@ -91,17 +93,22 @@ class VisualToolBoxV5(ToolBase):
                     
                 else:
                     raise ValueError(f"Unknown tool name: {tool_name}")
-                # Prepare the observation
-                image_token = "<image>" * len(current_image)
-                obs = {
-                    "prompt": "<|im_end|>\n<|im_start|>user\n" + "<tool_response>" + image_token + "</tool_response>" + self.user_prompt.format(tool_call_str) + "<|im_end|>\n<|im_start|>assistant\n",
-                    "multi_modal_data": {"image": current_image}
-                }
-                reward = 0.0  # Reward for successful tool call with correct JSON
-                done = False
-                info = {"status": "success", "tool_used": tool_name}
-                print(f'[DEBUG] SUCCESS ACTION {action_string=}')
-                return obs, reward, done, info
+            # Prepare the observation
+            tool_response = "<tool_response>" +"\n" +  "<image>" + "\n" + "</tool_response>" + "\n"
+            tool_response = tool_response * len(current_image)
+            # obs = {
+            #     "prompt": "<|im_end|>\n<|im_start|>user\n" + "<tool_response>" + image_token + "</tool_response>" + self.user_prompt.format(tool_call_str) + "<|im_end|>\n<|im_start|>assistant\n",
+            #     "multi_modal_data": {"image": current_image}
+            # }
+            obs = {
+                "prompt": "<|im_end|>\n<|im_start|>user\n" + tool_response + self.user_prompt+ "<|im_end|>\n<|im_start|>assistant\n",
+                "multi_modal_data": {"image": current_image}
+            }
+            reward = 0.0  # Reward for successful tool call with correct JSON
+            done = False
+            info = {"status": "success", "tool_used": tool_name}
+            print(f'[DEBUG] SUCCESS ACTION {action_string=}')
+            return obs, reward, done, info
         except Exception as e:
             # Return an error observation if something goes wrong
             print(f'[DEBUG] Execute WRONG - {str(e)} {action_string=}')

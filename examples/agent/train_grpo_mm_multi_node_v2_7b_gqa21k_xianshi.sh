@@ -8,7 +8,7 @@ wandb login
 
 
 PROJECT_NAME="agent_vlagent"
-EXPERIMENT_NAME="visual_toolbox_v2_grpo_qwenvl7b_gqa21k_fix_xianshi"
+EXPERIMENT_NAME="visual_toolbox_v2_grpo_qwenvl7b_gqa21k_fix_fixobs_xianshi"
 
 export SAVE_CHECKPOINT_DIR=/fs-computility/mabasic/yangminghao/project/VeRL-Agent/checkpoints
 # export VLLM_ATTENTION_BACKEND=XFORMERS # vllm + qwen2-7b with flash_attn has some issues
@@ -45,7 +45,7 @@ PYTHONUNBUFFERED=1 python3 -m verl.trainer.main_ppo \
     actor_rollout_ref.actor.entropy_coeff=0.0001 \
     actor_rollout_ref.actor.checkpoint.contents=['model','hf_model','optimizer','extra'] \
     actor_rollout_ref.rollout.log_prob_micro_batch_size_per_gpu=1 \
-    actor_rollout_ref.rollout.tensor_model_parallel_size=4 \
+    actor_rollout_ref.rollout.tensor_model_parallel_size=1 \
     actor_rollout_ref.rollout.name=vllm \
     actor_rollout_ref.rollout.n=16 \
     actor_rollout_ref.rollout.max_num_batched_tokens=32768 \
@@ -59,8 +59,7 @@ PYTHONUNBUFFERED=1 python3 -m verl.trainer.main_ppo \
     actor_rollout_ref.ref.fsdp_config.param_offload=True \
     actor_rollout_ref.rollout.agent.activate_agent=True \
     actor_rollout_ref.rollout.agent.tool_name_key=env_name \
-    actor_rollout_ref.rollout.agent.single_response_max_tokens=2048 \
-    actor_rollout_ref.rollout.agent.single_obs_max_length=8192 \
+    actor_rollout_ref.rollout.agent.single_response_max_tokens=4096 \
     actor_rollout_ref.rollout.agent.max_turns=4 \
     actor_rollout_ref.rollout.agent.concurrent_workers=1 \
     actor_rollout_ref.rollout.agent.show_tqdm=True \
@@ -69,7 +68,7 @@ PYTHONUNBUFFERED=1 python3 -m verl.trainer.main_ppo \
     trainer.val_before_train=False \
     trainer.n_gpus_per_node=8 \
     trainer.nnodes=${MLP_WORKER_NUM} \
-    trainer.save_freq=8 \
+    trainer.save_freq=4 \
     trainer.test_freq=10000 \
     trainer.project_name=${PROJECT_NAME} \
     trainer.experiment_name=${EXPERIMENT_NAME} \

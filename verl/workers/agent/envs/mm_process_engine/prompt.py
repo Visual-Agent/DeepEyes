@@ -104,6 +104,12 @@ You may call **one or more** functions to assist with the user query.
 {"name": "image_zoom_in_tool", "arguments": {"bbox_2d": [8, 40, 50, 150], "label": "the person under the tree"}}  
 </tool_call>"""
 
-    USER_PROMPT_V5 = "\nThink first, call **image_zoom_in_tool** one or more times if needed. Format strictly as:  <think>...</think>  <tool_call>...</tool_call> <tool_call>...</tool_call> (if any tools needed)."
-
-    TURN_PROMPT_V5 = "\nAbove are the tool responses after calling {}. Think first, continue to call **image_zoom_in_tool** if needed. Format strictly as:  <think>...</think>  <tool_call>...</tool_call> <tool_call>...</tool_call> (if any tools needed)."
+    # USER_PROMPT_V5 = "\nThink first, call **image_zoom_in_tool** one or more times if needed, i.e., <think>...</think>  <tool_call>...</tool_call> <tool_call>...</tool_call> (if any tools needed) OR <answer>...</answer> (if no tools needed)."
+    # # 看第一轮的rollout，这个会有一些问题，导致模型最后没回答，只是说了一句信息完备，不用调工具了。后续观察score上涨很快，应该自己学会了！
+    # TURN_PROMPT_V5 = "\nAbove are the tool responses after calling {}. Think first, continue to call **image_zoom_in_tool** if needed. Format strictly as:  <think>...</think>  <tool_call>...</tool_call> <tool_call>...</tool_call> (if any tools needed)."
+#     TURN_PROMPT_V5_PLUS = """Think in your mind first, <think> Analyze the problem thoroughly. Determine if available information suffices or if tools are needed. Decide whether to call tools one or more times or provide final answer.</think> 
+# Then execute one action: <tool_call> tools </tool_call> OR <answer> complete response </answer>
+# """
+    
+    TURN_PROMPT_V5 = "\nThink in the mind first, and then decide whether to call tools one or more times OR provide final answer. Format strictly as: <think>...</think> <tool_call>...</tool_call> <tool_call>...</tool_call> (if any tools needed) OR <answer>...</answer> (if no tools needed)."
+    USER_PROMPT_V5 = TURN_PROMPT_V5

@@ -64,7 +64,7 @@ def _default_compute_score(data_source, solution_str, ground_truth, extra_info=N
     elif data_source in ['vl_agent']:
         from . import vl_agent
         res = vl_agent.compute_score(solution_str, ground_truth, extra_info)
-    elif data_source in ['vstar']:
+    elif data_source in ['vstar', 'chart']:
         from . import vl_agent
         res = vl_agent.compute_score(solution_str, ground_truth, extra_info)
     elif data_source in ["frozenlake"]:

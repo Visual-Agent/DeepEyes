@@ -29,20 +29,20 @@ import argparse
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--local_dir', default='/fs-computility/mabasic/yangminghao/data/MinghaoYang/mmreasoning')
+    parser.add_argument('--local_dir', default='/fs-computility/mabasic/yangminghao/data/MMInstruction/ArxivQA')
     parser.add_argument('--hdfs_dir', default=None)
 
     args = parser.parse_args()
 
-    data_source = 'vstar'
-    data_path = '/fs-computility/mabasic/yangminghao/data/MinghaoYang/mmreasoning/ziwei/distilled'
-    env_name = "visual_toolbox_v2"
-    sys_prompt = PROMPT.SYSTEM_PROMPT_V2
-    instruction_prompt = PROMPT.USER_PROMPT_V2
+    data_source = 'chart'
+    data_path = '/fs-computility/mabasic/yangminghao/data/MMInstruction/ArxivQA'
+    env_name = "visual_toolbox_v5"
+    sys_prompt = PROMPT.SYSTEM_PROMPT_V5
+    instruction_prompt = PROMPT.USER_PROMPT_V5
 
     # dataset = datasets.load_dataset('json', os.path.join(data_path, 'dataset.jsonl'))
 
-    jsonl_path = os.path.join(data_path, 'gqa_6k.jsonl')
+    jsonl_path = os.path.join(data_path, 'arxivqa_filter_stage1_reform.jsonl')
     jsonl_data = []
     with open(jsonl_path, 'r', encoding='utf-8') as f:
         for line in f:
@@ -60,67 +60,80 @@ if __name__ == '__main__':
 
     # add a row to each data item that represents a unique id
     def make_map_fn(split):
-
         def process_fn(example, idx):
-            # print (example)
-            
-            problem = example.pop('question')
-            prompt = '<image>\n' + '\nQuestion:\n' + problem + instruction_prompt
-            answer = example.pop('answer')
+            id = example.pop('id')
+            problem = example.pop('new_question')
+            prompt = problem + instruction_prompt
+            answer = example.pop('new_answer')
             image_url = example.pop('image')
             images = []
-            target_size = (224, 224)
-
-            image_path = os.path.join("/fs-computility/mabasic/yangminghao/data", image_url)
-            # with open(image_path, 'rb') as img_file:
-            #     img_bytes = img_file.read()
-            with Image.open(image_path) as img:
-                image_format = img.format
-                img_byte_arr = io.BytesIO()
-                # 将图片保存到字节流中
-                img.save(img_byte_arr, format=image_format)
-                # 获取字节流的内容
-                img_byte_arr = img_byte_arr.getvalue()
-                img_bytes = img_byte_arr
-            images.append({'bytes': img_bytes, 'path': image_path})
             
-
-            data = {
-                "data_source": data_source,
-                "prompt": [
-                    {
-                        "role": "system",
-                        "content": sys_prompt,
+            image_path = os.path.join("/fs-computility/mabasic/yangminghao/data/MMInstruction/ArxivQA", image_url)
+            
+            try:
+                with Image.open(image_path) as img:
+                    # Check image dimensions
+                    width, height = img.size
+                    if width < 28 or height < 28:
+                        # Skip this example by returning None
+                        # The dataset filtering will handle None returns later
+                        print("Image too small, skipping:", image_path)
+                        return None
+                    
+                    image_format = img.format
+                    img_byte_arr = io.BytesIO()
+                    # Save image to byte stream
+                    img.save(img_byte_arr, format=image_format)
+                    # Get byte stream content
+                    img_byte_arr = img_byte_arr.getvalue()
+                    img_bytes = img_byte_arr
+                
+                images.append({'bytes': img_bytes, 'path': image_path})
+                
+                data = {
+                    "data_source": data_source,
+                    "prompt": [
+                        {
+                            "role": "system",
+                            "content": sys_prompt,
+                        },
+                        {
+                            "role": "user",
+                            "content": prompt,
+                        },
+                    ],
+                    "images": images,
+                    "ability": "vl_chart",
+                    "env_name": env_name,
+                    "reward_model": {
+                        "style": "model",
+                        "ground_truth": answer
                     },
-                    {
-                        "role": "user",
-                        "content": prompt,
-                    },
-                ],
-                "images": images,
-                "ability": "vl",
-                "env_name": env_name,
-                "reward_model": {
-                    "style": "rule",
-                    "ground_truth": answer
-                },
-                "extra_info": {
-                    'split': split,
-                    'index': idx,
-                    'answer': answer,
-                    "question": problem,
+                    "extra_info": {
+                        'split': split,
+                        'index': str(id),
+                        'answer': answer,
+                        "question": problem,
+                    }
                 }
-            }
-            return data
+                return data
+                
+            except Exception as e:
+                print(f"Error processing image {image_path}: {str(e)}")
+                return None
 
         return process_fn
 
+    # First map with size checking
     dataset = raw_dataset.map(function=make_map_fn('train'), with_indices=True, num_proc=8)
+
+    # Filter out None values (skipped examples)
+    dataset = dataset.filter(lambda x: x is not None, num_proc=8)
 
     local_dir = args.local_dir
     hdfs_dir = args.hdfs_dir
 
-    dataset.to_parquet(os.path.join(local_dir, 'vl_agent_V2_train_gqa_6k_new.parquet'))
+    dataset.to_parquet(os.path.join(local_dir, 'ArxivQA_chart42k_visual_toolbox_v5.parquet'))
 
     if hdfs_dir is not None:
         makedirs(hdfs_dir)
