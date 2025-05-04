@@ -42,7 +42,7 @@ if __name__ == '__main__':
 
     # dataset = datasets.load_dataset('json', os.path.join(data_path, 'dataset.jsonl'))
 
-    jsonl_path = os.path.join(data_path, 'arxivqa_filter_stage1_reform.jsonl')
+    jsonl_path = os.path.join(data_path, 'arxivqa_filter_stage3_below0.5.jsonl')
     jsonl_data = []
     with open(jsonl_path, 'r', encoding='utf-8') as f:
         for line in f:
@@ -63,7 +63,7 @@ if __name__ == '__main__':
         def process_fn(example, idx):
             id = example.pop('id')
             problem = example.pop('new_question')
-            prompt = problem + instruction_prompt
+            prompt = "<image>\n" + problem + instruction_prompt
             answer = example.pop('new_answer')
             image_url = example.pop('image')
             images = []
@@ -133,7 +133,7 @@ if __name__ == '__main__':
     local_dir = args.local_dir
     hdfs_dir = args.hdfs_dir
 
-    dataset.to_parquet(os.path.join(local_dir, 'ArxivQA_chart42k_visual_toolbox_v5.parquet'))
+    dataset.to_parquet(os.path.join(local_dir, 'data_v0.7_visual_toolbox_v5.parquet'))
 
     if hdfs_dir is not None:
         makedirs(hdfs_dir)

@@ -14,7 +14,7 @@ class VisualToolBoxV5(ToolBase):
     name = "visual_toolbox_v5"
     # user_prompt = "Here is the cropped image returned after you calling the function {}.\nIf the images provided above are sufficient to answer the user's question, please put your final answer within <answer></answer>. Otherwise you can continue to call tools within <tool_call></tool_call>."
     user_prompt = PROMPT.TURN_PROMPT_V5
-    max_action_per_turn = 3
+    max_action_per_turn = 2
     def __init__(self, _name, _desc, _params, **kwargs):
         super().__init__(
             name=self.name,
@@ -94,14 +94,15 @@ class VisualToolBoxV5(ToolBase):
                 else:
                     raise ValueError(f"Unknown tool name: {tool_name}")
             # Prepare the observation
-            tool_response = "<tool_response>" +"\n" +  "<image>" + "\n" + "</tool_response>" + "\n"
-            tool_response = tool_response * len(current_image)
+            # image_token = "<image>" * len(current_image)
             # obs = {
             #     "prompt": "<|im_end|>\n<|im_start|>user\n" + "<tool_response>" + image_token + "</tool_response>" + self.user_prompt.format(tool_call_str) + "<|im_end|>\n<|im_start|>assistant\n",
             #     "multi_modal_data": {"image": current_image}
             # }
+            tool_response = "<tool_response>" +"\n" +  "<image>" + "\n" + "</tool_response>" + "\n"
+            tool_response = tool_response * len(current_image)
             obs = {
-                "prompt": "<|im_end|>\n<|im_start|>user\n" + tool_response + self.user_prompt+ "<|im_end|>\n<|im_start|>assistant\n",
+                "prompt": "\n<|im_start|>user\n" + tool_response.strip() + self.user_prompt+ "<|im_end|>\n<|im_start|>assistant\n",
                 "multi_modal_data": {"image": current_image}
             }
             reward = 0.0  # Reward for successful tool call with correct JSON
@@ -112,7 +113,7 @@ class VisualToolBoxV5(ToolBase):
         except Exception as e:
             # Return an error observation if something goes wrong
             print(f'[DEBUG] Execute WRONG - {str(e)} {action_string=}')
-            obs = "<|im_end|>\n<|im_start|>user\n" + f"Error: {str(e)}" + "<|im_end|>\n<|im_start|>assistant\n"
+            obs = "\n<|im_start|>user\n" + f"Error: {str(e)}" + "<|im_end|>\n<|im_start|>assistant\n"
             reward = 0.0  # No reward for failed execution
             done = False
             info = {"error": str(e), "status": "failed"}

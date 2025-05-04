@@ -6,7 +6,7 @@ import re
 openai_api_key = "EMPTY"
 
 openai_api_base_list = [
-    "http://172.30.52.123:8000/v1", # 72b-it
+    "http://172.30.20.119:8000/v1", # 72b-it
 ]
 
 client_list = []
@@ -107,7 +107,7 @@ Judgement:"""
 
 def compute_score(predict_str: str, ground_truth: str, extra_info=None) -> float:
     is_format_error = False
-    predict_str = "<think>" + predict_str
+    # predict_str = "<think>" + predict_str
     count_think_1 = predict_str.count("<think>")
     count_think_2 = predict_str.count("</think>")
     if count_think_1 != count_think_2:
