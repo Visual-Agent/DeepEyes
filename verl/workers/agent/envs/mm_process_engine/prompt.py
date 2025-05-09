@@ -113,3 +113,4 @@ You may call **one or more** functions to assist with the user query.
     
     TURN_PROMPT_V5 = "\nThink in the mind first, and then decide whether to call one or more tools OR provide final answer. Format strictly as: <think>...</think> <tool_call>...</tool_call> <tool_call>...</tool_call> (if any tools needed) OR <answer>...</answer> (if no tools needed)."
     USER_PROMPT_V5 = TURN_PROMPT_V5
+    REASON_PROMPT = "You are a helpful assistant. The user will ask you a question and you as the assistant solve it. The assistant first thinks how to solve the task through reasoning and then provides the user with the final answer. The reasoning process and answer are enclosed within <think>...</think> and <answer>...</answer> tags, respectively."

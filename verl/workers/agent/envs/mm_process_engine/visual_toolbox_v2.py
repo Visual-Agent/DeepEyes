@@ -40,7 +40,7 @@ class VisualToolBoxV2(ToolBase):
             ValueError: If no tool call is found or JSON is invalid.
         """
         tool_call_match = re.findall(r'<tool_call>(.*?)</tool_call>', action_string, re.DOTALL)
-        return tool_call_match[-1] if tool_call_match else None
+        return tool_call_match[0] if tool_call_match else None
 
     def execute(self, action_string: str, **kwargs) -> tuple:
         """
@@ -66,7 +66,7 @@ class VisualToolBoxV2(ToolBase):
             tool_call = json.loads(action.strip())  # 或使用 literal_eval
         except Exception as e:
             error_msg = f"Invalid tool call format: {action.strip()}. Error: {e}"
-            obs = "<|im_end|>\n<|im_start|>user\n" + f"Error: {str(error_msg)}" + "<|im_end|>\n<|im_start|>assistant\n"
+            obs = "\n<|im_start|>user\n" + f"Error: {str(error_msg)}" + "<|im_end|>\n<|im_start|>assistant\n"
             info = {"error": str(e), "status": "failed"}
             return obs, 0.0, False, {}
         try:
@@ -99,7 +99,7 @@ class VisualToolBoxV2(ToolBase):
                 raise ValueError(f"Unknown tool name: {tool_name}")
             # Prepare the observation
             obs = {
-                "prompt": "<|im_end|>\n<|im_start|>user\n" + "<tool_response>" +"<image>" + self.user_prompt + "</tool_response>" + "<|im_end|>\n<|im_start|>assistant\n",
+                "prompt": "\n<|im_start|>user\n" + "<tool_response>" +"<image>"  + "</tool_response>" + self.user_prompt + "<|im_end|>\n<|im_start|>assistant\n",
                 "multi_modal_data": {"image": [current_image]}
             }
             reward = 0.0  # Reward for successful tool call with correct JSON
@@ -110,7 +110,7 @@ class VisualToolBoxV2(ToolBase):
         except Exception as e:
             # Return an error observation if something goes wrong
             print(f'[DEBUG] Execute WRONG - {str(e)} {action_string=}')
-            obs = "<|im_end|>\n<|im_start|>user\n" + f"Error: {str(e)}" + "<|im_end|>\n<|im_start|>assistant\n"
+            obs = "\n<|im_start|>user\n" + f"Error: {str(e)}" + "<|im_end|>\n<|im_start|>assistant\n"
             reward = 0.0  # No reward for failed execution
             done = False
             info = {"error": str(e), "status": "failed"}
