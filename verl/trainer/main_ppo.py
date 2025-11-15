@@ -21,6 +21,7 @@ import hydra
 import ray
 
 from verl.trainer.ppo.ray_trainer import RayPPOTrainer
+from verl.utils.device import is_cuda_available
 
 
 def get_custom_reward_fn(config):
@@ -203,6 +204,7 @@ class TaskRunner:
             ray_worker_group_cls=ray_worker_group_cls,
             reward_fn=reward_fn,
             val_reward_fn=val_reward_fn,
+            device_name="cuda" if is_cuda_available else "npu"
         )
         trainer.init_workers()
         trainer.fit()

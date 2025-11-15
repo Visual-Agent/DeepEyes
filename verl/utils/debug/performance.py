@@ -18,6 +18,7 @@ import torch
 import torch.distributed as dist
 
 from verl.utils.logger.aggregate_logger import DecoratorLoggerBase
+from verl.utils.device import get_torch_device
 
 
 def log_gpu_memory_usage(head: str, logger: logging.Logger = None, level=logging.DEBUG, rank: int = 0):
@@ -62,8 +63,8 @@ class GPUMemoryLogger(DecoratorLoggerBase):
         return f
     
     def log(self, func, *args, **kwargs):
-        memory_allocated = torch.cuda.memory_allocated() / 1024**3
-        memory_reserved = torch.cuda.memory_reserved() / 1024**3
+        memory_allocated = get_torch_device().memory_allocated() / 1024**3
+        memory_reserved = get_torch_device().memory_reserved() / 1024**3
 
         message = f"Before {func.__name__}, memory allocated (GB): {memory_allocated}, memory reserved (GB): {memory_reserved}"
         self.logging_function(message)

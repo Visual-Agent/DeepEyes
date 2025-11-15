@@ -18,8 +18,8 @@ from importlib.metadata import PackageNotFoundError, version
 # [SUPPORT AMD:]
 import torch
 
-###
-
+### [SUPPORT ROCM]
+import os
 
 def get_version(pkg):
     try:
@@ -28,22 +28,22 @@ def get_version(pkg):
         return None
 
 
-package_name = "vllm"
-package_version = get_version(package_name)
+vllm_package_name = "vllm"
+vllm_package_version = get_version(vllm_package_name)
+if vllm_package_version is None:
+    raise PackageNotFoundError("To use vllm rollout, please ensure the 'vllm' package is properly installed. See https://verl.readthedocs.io/en/latets/start/install.html for more details")
 
-###
-# package_version = get_version(package_name)
-# [SUPPORT AMD:]
-if "AMD" in torch.cuda.get_device_name():
+if "ROCM_PATH" in os.environ:
     import re
 
-    package_version = version(package_name)
-    package_version = re.match(r"(\d+\.\d+\.?\d*)", package_version).group(1)
-else:
-    package_version = get_version(package_name)
+    match = re.match(r"(\d+\.\d+\.?\d*)", vllm_package_version)
+    if match:
+        vllm_package_version = match.group(1)
+    else:
+        raise ValueError(f"Warning: Could not parse version format:{vllm_package_version}")
 ###
 
-if package_version <= "0.6.3":
+if vllm_package_version <= "0.6.3":
     vllm_mode = "customized"
     from .fire_vllm_rollout import FIREvLLMRollout
     from .vllm_rollout import vLLMRollout

@@ -26,9 +26,9 @@ from verl.protocol import all_gather_data_proto
 from verl.third_party.vllm import LLM, vllm_version
 from verl.third_party.vllm import parallel_state as vllm_ps
 from verl.utils.debug import GPUMemoryLogger, log_gpu_memory_usage
+from verl.utils.device import get_torch_device
 
 from .base import BaseShardingManager
-from .patch import patched_ds_v3_load_weights, patched_qwen_moe_load_weights
 
 logger = logging.getLogger(__file__)
 logger.setLevel(os.getenv("VERL_LOGGING_LEVEL", "WARN"))
@@ -65,26 +65,26 @@ class FSDPVLLMShardingManager(BaseShardingManager):
         self.tp_rank = vllm_ps.get_tensor_model_parallel_rank()
 
         # Note that torch_random_states may be different on each dp rank
-        self.torch_random_states = torch.cuda.get_rng_state()
+        self.torch_random_states = get_torch_device().get_rng_state()
         # get a random rng states
         if self.device_mesh is not None:
             gen_dp_rank = self.device_mesh["dp"].get_local_rank()
-            torch.cuda.manual_seed(gen_dp_rank + 1000)  # make sure all tp ranks have the same random states
-            self.gen_random_states = torch.cuda.get_rng_state()
-            torch.cuda.set_rng_state(self.torch_random_states)
+            get_torch_device().manual_seed(gen_dp_rank + 1000)  # make sure all tp ranks have the same random states
+            self.gen_random_states = get_torch_device().get_rng_state()
+            get_torch_device().set_rng_state(self.torch_random_states)
         else:
             self.gen_random_states = None
 
     @GPUMemoryLogger(role="fsdp vllm sharding_manager", logger=logger)
     def __enter__(self):
-        # NOTE: Basically, we only need `torch.cuda.empty_cache()` before vllm wake_up and
+        # NOTE: Basically, we only need `get_torch_device().empty_cache()` before vllm wake_up and
         # after vllm sleep, since vllm has its own caching memory allocator CuMemAllocator.
         # Out of vllm scope, we should avoid empty cache to let pytorch using caching memory
         # to speed up memory allocations.
         #
         # pytorch: https://pytorch.org/docs/stable/notes/cuda.html#memory-management
         # vllm: https://github.com/vllm-project/vllm/blob/v0.7.3/vllm/device_allocator/cumem.py#L103
-        torch.cuda.empty_cache()
+        get_torch_device().empty_cache()
 
         log_gpu_memory_usage("Before state_dict() in sharding manager memory", logger=logger)
         params = self.module.state_dict()
@@ -109,7 +109,7 @@ class FSDPVLLMShardingManager(BaseShardingManager):
             self.update_params(params)
             log_gpu_memory_usage("After sync model weights in sharding manager", logger=logger)
             del params
-            torch.cuda.empty_cache()
+            get_torch_device().empty_cache()
 
             if "tags" in inspect.signature(self.inference_engine.wake_up).parameters:
                 self.inference_engine.wake_up(tags=["kv_cache"])
@@ -118,14 +118,14 @@ class FSDPVLLMShardingManager(BaseShardingManager):
 
         # TODO: offload FSDP model weights
         # self.module.cpu()
-        # torch.cuda.empty_cache()
+        # get_torch_device().empty_cache()
         # if torch.distributed.get_rank() == 0:
-        # print(f'after model to cpu in sharding manager memory allocated: {torch.cuda.memory_allocated() / 1e9}GB, reserved: {torch.cuda.memory_reserved() / 1e9}GB')
+        # print(f'after model to cpu in sharding manager memory allocated: {get_torch_device().memory_allocated() / 1e9}GB, reserved: {get_torch_device.memory_reserved() / 1e9}GB')
 
         # important: need to manually set the random states of each tp to be identical.
         if self.device_mesh is not None:
-            self.torch_random_states = torch.cuda.get_rng_state()
-            torch.cuda.set_rng_state(self.gen_random_states)
+            self.torch_random_states = get_torch_device().get_rng_state()
+            get_torch_device().set_rng_state(self.gen_random_states)
 
     @GPUMemoryLogger(role="fsdp vllm sharding_manager", logger=logger)
     def __exit__(self, exc_type, exc_value, traceback):
@@ -140,17 +140,17 @@ class FSDPVLLMShardingManager(BaseShardingManager):
 
         # self.module.to('cuda')
         # if torch.distributed.get_rank() == 0:
-        #     print(f'after actor module to cuda in sharding manager memory allocated: {torch.cuda.memory_allocated() / 1e9}GB, reserved: {torch.cuda.memory_reserved() / 1e9}GB')
+        #     print(f'after actor module to cuda in sharding manager memory allocated: {get_torch_device().memory_allocated() / 1e9}GB, reserved: {get_torch_device().memory_reserved() / 1e9}GB')
 
         self.module.train()
 
         # add empty cache after each compute
-        torch.cuda.empty_cache()
+        get_torch_device().empty_cache()
 
         # restore random states
         if self.device_mesh is not None:
-            self.gen_random_states = torch.cuda.get_rng_state()
-            torch.cuda.set_rng_state(self.torch_random_states)
+            self.gen_random_states = get_torch_device().get_rng_state()
+            get_torch_device().set_rng_state(self.torch_random_states)
 
     @GPUMemoryLogger(role="fsdp vllm sharding_manager", logger=logger)
     def preprocess_data(self, data: DataProto) -> DataProto:

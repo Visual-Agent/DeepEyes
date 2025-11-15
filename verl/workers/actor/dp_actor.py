@@ -21,7 +21,6 @@ import os
 from typing import Tuple
 
 import torch
-from flash_attn.bert_padding import index_first_axis, pad_input, rearrange, unpad_input
 from torch import nn
 from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
 
@@ -34,6 +33,12 @@ from verl.utils.seqlen_balancing import get_reverse_idx, rearrange_micro_batches
 from verl.utils.torch_functional import logprobs_from_logits
 from verl.utils.ulysses import gather_outpus_and_unpad, ulysses_pad_and_slice_inputs
 from verl.workers.actor import BasePPOActor
+from verl.utils.device import get_device_name, get_torch_device, is_cuda_available, is_npu_available
+
+if is_cuda_available:
+    from flash_attn.bert_padding import pad_input, unpad_input, rearrange, index_first_axis
+elif is_npu_available:
+    from transformers.integrations.npu_flash_attention import pad_input, unpad_input, rearrange, index_first_axis
 
 __all__ = ["DataParallelPPOActor"]
 
@@ -57,6 +62,7 @@ class DataParallelPPOActor(BasePPOActor):
             if self.config.get("use_torch_compile", True)  #  use torch compile by default
             else verl_F.entropy_from_logits
         )
+        self.device_name = get_device_name()
 
     def _forward_micro_batch(
         self, micro_batch, temperature, calculate_entropy=False
@@ -74,7 +80,7 @@ class DataParallelPPOActor(BasePPOActor):
                     [inputs[key] for inputs in micro_batch["multi_modal_inputs"]], dim=0
                 )
 
-        with torch.autocast(device_type="cuda", dtype=torch.bfloat16):
+        with torch.autocast(device_type=self.device_name, dtype=torch.bfloat16):
             input_ids = micro_batch["input_ids"]
             batch_size, seqlen = input_ids.shape
             attention_mask = micro_batch["attention_mask"]
@@ -310,9 +316,9 @@ class DataParallelPPOActor(BasePPOActor):
                 for data in micro_batches:
                     # Support all hardwares
                     if isinstance(data, DataProto):
-                        data = {**data.batch.to(torch.cuda.current_device()), **data.non_tensor_batch}
+                        data = {**data.batch.to(get_torch_device().current_device()), **data.non_tensor_batch}
                     else:
-                        data = data.to(torch.cuda.current_device())  # actor device is cpu when using offload
+                        data = data.to(get_torch_device().current_device())  # actor device is cpu when using offload
                     responses = data["responses"]
                     response_length = responses.size(1)
                     action_or_attn_mask = data['action_mask'] if 'action_mask' in data.keys() else data['attention_mask']

@@ -89,7 +89,7 @@ class RayResourcePool(ResourcePool):
         self.pgs = None
         self.detached = detached
 
-    def get_placement_groups(self, strategy="STRICT_PACK", name=None):
+    def get_placement_groups(self, strategy="STRICT_PACK", name=None, device_name="cuda"):
         if self.pgs is not None:
             return self.pgs
 
@@ -97,13 +97,11 @@ class RayResourcePool(ResourcePool):
             name if name else f"{self.name_prefix}verl_group_{'_'.join([str(count) for count in self._store])}:"
         )
         # print(f"pg_name_prefix = {pg_name_prefix}")
-        pg_scheme = [
-            [
-                {"CPU": self.max_colocate_count, "GPU": 1} if self.use_gpu else {"CPU": self.max_colocate_count}
-                for _ in range(process_count)
-            ]
-            for process_count in self._store
-        ]
+        if device_name == "npu":
+            device_name = "NPU"
+        elif device_name == "cuda":
+            device_name = "GPU"
+        pg_scheme = [[{"CPU": self.max_colocate_count, device_name: 1} if self.use_gpu else {"CPU": self.max_colocate_count} for _ in range(process_count)] for process_count in self._store]
 
         lifetime = "detached" if self.detached else None
 
@@ -172,7 +170,7 @@ class RayClassWithInitArgs(ClassWithInitArgs):
         self._options.update(options)
 
     def __call__(
-        self, placement_group, placement_group_bundle_idx, use_gpu: bool = True, num_gpus=1, sharing_with=None
+        self, placement_group, placement_group_bundle_idx, use_gpu: bool = True, num_gpus=1, sharing_with=None, device_name="cuda"
     ) -> Any:
         if sharing_with is not None:
             target_node_id = ray.get(sharing_with.get_node_id.remote())
@@ -189,8 +187,11 @@ class RayClassWithInitArgs(ClassWithInitArgs):
         }
         options.update(self._options)
 
-        if use_gpu:
+        if use_gpu and device_name == "cuda":
             options["num_gpus"] = num_gpus
+        if use_gpu and device_name == "npu":
+            options["resources"] = {"NPU": num_gpus}
+
 
         if len(self._additional_resource) > 1:
             for k, v in self._additional_resource.items():
@@ -212,13 +213,14 @@ class RayWorkerGroup(WorkerGroup):
         detached=False,
         worker_names=None,
         ray_wait_register_center_timeout: int = 300,
+        device_name="cuda",
         **kwargs,
     ) -> None:
         super().__init__(resource_pool=resource_pool, **kwargs)
         self.ray_cls_with_init = ray_cls_with_init
         self.name_prefix = get_random_string(length=6) if name_prefix is None else name_prefix
         self._ray_wait_register_center_timeout = ray_wait_register_center_timeout
-
+        self.device_name = device_name
         if worker_names is not None:
             assert self._is_init_with_detached_workers
             self._worker_names = worker_names
@@ -248,7 +250,7 @@ class RayWorkerGroup(WorkerGroup):
         strategy = "PACK"
         if bin_pack:
             strategy = "STRICT_PACK"
-        pgs = resource_pool.get_placement_groups(strategy=strategy)
+        pgs = resource_pool.get_placement_groups(strategy=strategy, device_name=self.device_name)
         world_size = resource_pool.world_size
         self._world_size = world_size
         # cia.add_kwarg("_world_size", world_size)
@@ -288,7 +290,7 @@ class RayWorkerGroup(WorkerGroup):
 
                 # create a worker
                 worker = ray_cls_with_init(
-                    placement_group=pg, placement_group_bundle_idx=local_rank, use_gpu=use_gpu, num_gpus=num_gpus
+                    placement_group=pg, placement_group_bundle_idx=local_rank, use_gpu=use_gpu, num_gpus=num_gpus, device_name=self.device_name
                 )
                 self._workers.append(worker)
                 self._worker_names.append(name)

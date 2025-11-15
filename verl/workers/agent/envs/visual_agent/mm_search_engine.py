@@ -11,7 +11,6 @@ from time import sleep
 from playwright.sync_api import sync_playwright, Playwright
 from duckduckgo_search import DDGS
 
-from verl.utils.dataset.rl_dataset import process_image
 from verl.workers.agent.tool_envs import ToolBase, extract_tool_call_contents
 
 class MMSearchEngine(ToolBase):
