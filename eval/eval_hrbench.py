@@ -13,6 +13,8 @@ import base64
 import io
 from openai import OpenAI
 import requests
+import copy
+import pandas as pd
 
 
 parser = argparse.ArgumentParser()

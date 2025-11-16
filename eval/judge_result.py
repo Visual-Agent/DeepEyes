@@ -134,10 +134,11 @@ def process(line):
     line = line.strip()
     data = json.loads(line)
     question = data['question']
+    choice = data['answer_choice']
     answer = data['answer']
     pred_ans = data['pred_ans']
     pred_output = data['pred_output']
-    answer = 'A. ' + answer
+    answer = f"{choice}. {answer}"
 
     if '\\boxed' in pred_ans:
         pred_ans = pred_ans.split('\\boxed{')[1].split('}')[0]
@@ -145,12 +146,12 @@ def process(line):
     # rule base check
     acc_reward = 0.0
     if len(pred_ans)==1:
-        if pred_ans == 'A':
+        if pred_ans == choice: #'A':
             acc_reward = 1.0
         else:
             acc_reward = 0.0
     elif len(pred_ans) == 2 and '.' in pred_ans:
-        if 'A' in pred_ans:
+        if choice in pred_ans: #'A' in pred_ans:
             acc_reward = 1.0
         else:
             acc_reward = 0.0

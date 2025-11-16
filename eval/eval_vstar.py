@@ -13,7 +13,7 @@ import base64
 import io
 from openai import OpenAI
 import requests
-
+from random import shuffle
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--model_name', type=str, default='qwen', help='Model name for result save')
@@ -127,7 +127,9 @@ def process(img_arg):
         anno = json.load(f)
     question = anno['question']
     options = anno['options']
-
+    correct_answer = anno['options'][0]
+    shuffle(options)
+    
     option_str = "\n"
     for i in range(len(options)):
         option_str += abc_map[i + 1] + '. ' + options[i] + '\n'
@@ -270,7 +272,8 @@ def process(img_arg):
     save_info = {}
     save_info['image'] = img
     save_info['question'] = question
-    save_info['answer'] = anno['options'][0]
+    save_info['answer'] = correct_answer
+    save_info['answer_choice'] = chr(ord('A') + options.index(correct_answer))
     save_info['pred_ans'] = output_text
     save_info['pred_output'] = print_messages
     save_info['status'] = status

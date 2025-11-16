@@ -36,7 +36,7 @@ if args.eval_model_name is None:
 else:
     eval_model_name = args.eval_model_name
 
-hrbench_path = args.vstar_bench_path
+hrbench_path = args.hrbench_path
 result_root_path = args.save_path
 result_root_path = os.path.join(result_root_path, args.model_name)
 
@@ -129,6 +129,7 @@ def process(line):
     data = json.loads(line)
     question = data['question']
     answer = data['answer']
+    answer_str = data['answer_str']
     pred_ans = data['pred_ans']
     pred_output = data['pred_output']
     category = data['category']
@@ -148,7 +149,9 @@ def process(line):
             acc_reward = 1.0
         else:
             acc_reward = 0.0
-    elif answer in pred_ans:
+    # elif answer in pred_ans:
+    #     acc_reward = 1.0
+    elif answer_str in pred_ans:
         acc_reward = 1.0
     else:
         full_prompt = get_prompt(pred_ans, answer, question)
