@@ -305,7 +305,7 @@ ujson==5.10.0
 urllib3==2.2.3
 uvicorn==0.34.0
 uvloop==0.21.0
-verl==0.2.0.dev0
+verl==0.4.1
 virtualenv==20.27.1
 vllm==0.8.2
 wandb==0.19.1
