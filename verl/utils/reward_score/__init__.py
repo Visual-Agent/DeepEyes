@@ -14,7 +14,21 @@
 # from . import gsm8k, math, prime_math, prime_code
 import torch
 
-def _default_compute_score(data_source, solution_str, ground_truth, extra_info=None):
+def _default_compute_score(data_source, solution_str, ground_truth, extra_info=None, history_stats=None):
+    """
+    默认的奖励计算函数
+    
+    参数:
+        data_source: 数据集名称
+        solution_str: 模型生成的响应字符串
+        ground_truth: 标准答案
+        extra_info: 额外信息（如问题文本、图像路径等）
+        history_stats: 历史统计数据，包含近几轮的工具调用统计
+            - avg_tool_calls: 平均工具调用次数
+            - tool_success_rate: 工具调用成功率
+            - tool_usage_rate: 工具使用率
+            - history_size: 历史数据量
+    """
     if data_source == "openai/gsm8k":
         from . import gsm8k
 
@@ -63,15 +77,15 @@ def _default_compute_score(data_source, solution_str, ground_truth, extra_info=N
 
     elif data_source in ['vstar', 'vl_agent', 'chart']:
         from . import vl_agent
-        res = vl_agent.compute_score(solution_str, ground_truth, extra_info)
+        res = vl_agent.compute_score(solution_str, ground_truth, extra_info, history_stats)
 
     elif data_source in ['geoguessr']:
         from . import vl_agent
-        res = vl_agent.compute_common_reasoning(solution_str, ground_truth, extra_info)
+        res = vl_agent.compute_common_reasoning(solution_str, ground_truth, extra_info, history_stats)
 
     elif data_source in ['thinklite_eureka', 'xince']:
         from . import vl_agent
-        res = vl_agent.compute_score_math(solution_str, ground_truth, extra_info)
+        res = vl_agent.compute_score_math(solution_str, ground_truth, extra_info, history_stats)
 
     elif data_source in ["frozenlake"]:
         res = 0.0
